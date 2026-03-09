@@ -6,6 +6,10 @@
 A long-term memory server for AI assistants, implemented as an MCP server (Model Context Protocol).  
 Allows you to save and restore context between sessions. Requires Python 3.10+.
 
+## Version 1.0.3
+### What's new
+- Added `memory_bank_append_content` tool — append text to existing documents without loading their full content into the LLM context.
+
 ## Why do you need this?
 
 ### 💰 Token savings
