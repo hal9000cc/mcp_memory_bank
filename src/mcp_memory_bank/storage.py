@@ -1,6 +1,7 @@
 """Document storage: Markdown files with YAML frontmatter + SQLite index."""
 
 import json
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,6 +10,8 @@ from typing import Optional
 import frontmatter
 
 from .models import Document
+
+logger = logging.getLogger("memory-bank.storage")
 
 DOCUMENTS_DIR = "documents"
 INDEX_DB = "index.db"
@@ -21,6 +24,7 @@ class MemoryBankStorage:
         self.db_path = base_dir / INDEX_DB
 
         self.docs_dir.mkdir(parents=True, exist_ok=True)
+        logger.debug("storage dir: %s", self.docs_dir)
         self._init_db()
         self._sync_index()
 
@@ -63,15 +67,19 @@ class MemoryBankStorage:
         with self._connect() as conn:
             indexed = {row["name"] for row in conn.execute("SELECT name FROM documents")}
 
-            # Remove stale entries for deleted files
-            for stale in indexed - md_files:
-                conn.execute("DELETE FROM documents WHERE name = ?", (stale,))
+            stale = indexed - md_files
+            if stale:
+                logger.debug("removing stale index entries: %s", stale)
+            for name in stale:
+                conn.execute("DELETE FROM documents WHERE name = ?", (name,))
 
-            # Add or refresh entries for existing files
+            new_files = md_files - indexed
             for filename in md_files:
                 doc = self._read_md(filename)
                 if doc:
                     self._upsert_index(conn, doc)
+
+        logger.info("index synced: %d documents (%d new)", len(md_files), len(new_files))
 
     def _upsert_index(self, conn: sqlite3.Connection, doc: Document) -> None:
         conn.execute(
@@ -101,6 +109,7 @@ class MemoryBankStorage:
     def _read_md(self, name: str) -> Optional[Document]:
         path = self._md_path(name)
         if not path.exists():
+            logger.debug("document not found: %s", name)
             return None
         post = frontmatter.load(str(path))
         tags = post.get("tags", [])
@@ -160,6 +169,7 @@ class MemoryBankStorage:
         now = _now_iso()
         doc = Document(name=name, tags=tags, core=core, last_modified=now, content=content)
         self._write_md(doc)
+        logger.debug("written to disk: %s", name)
         with self._connect() as conn:
             self._upsert_index(conn, doc)
         return doc

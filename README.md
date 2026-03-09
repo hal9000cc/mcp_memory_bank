@@ -19,8 +19,14 @@ pip install mcp-memory-bank
 {
   "mcpServers": {
     "memory-bank": {
+      "disabled": false,
+      "timeout": 20,
+      "type": "stdio",
       "command": "mcp-memory-bank",
-      "args": ["--dir", "/absolute/path/to/your/project/.memory_bank"]
+      "args": [
+        "--dir",
+        "/absolute/path/to/your/project/.memory_bank"
+      ]
     }
   }
 }
@@ -216,3 +222,41 @@ SQLite-индекс пересобирается автоматически пр
 | `architecture.md` | Ключевые архитектурные и технические решения | `decision`, `architecture` | `false` |
 
 Имена документов — рекомендация. Допустимы любые осмысленные имена в формате `camelCase.md` или `kebab-case.md`.
+
+---
+
+## Аргументы командной строки
+
+| Аргумент | Тип | По умолчанию | Описание |
+|---|---|---|---|
+| `--dir` | путь | `.memory_bank/` в cwd | Путь к директории хранилища документов |
+| `--log-level` | строка | `INFO` | Уровень логирования: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `--log-file` | путь | stderr | Файл для записи логов. Если не указан — логи выводятся в stderr |
+| `--response-delay` | число (мс) | `0` | Задержка перед отправкой ответа на каждый вызов инструмента |
+
+---
+
+### `--response-delay`: обход бага с extended thinking
+
+В Cline 3.71.0 при использовании моделей с extended thinking (например, Claude Opus с опцией «Extended thinking») возникает race condition: Cline не успевает передать thinking blocks обратно в API Claude до получения ответа от MCP-сервера. Это приводит к зависанию после надписи «Thinking...».
+
+**Решение:** добавьте задержку 100 мс — этого достаточно для устранения проблемы:
+
+```json
+{
+  "mcpServers": {
+    "memory-bank": {
+      "disabled": false,
+      "timeout": 20,
+      "type": "stdio",
+      "command": "mcp-memory-bank",
+      "args": [
+        "--dir", "/absolute/path/to/your/project/.memory_bank",
+        "--response-delay", "100"
+      ]
+    }
+  }
+}
+```
+
+> **Примечание:** аргумент `--response-delay` актуален только при использовании extended thinking. При обычной работе задержку можно не указывать.

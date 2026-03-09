@@ -1,56 +1,56 @@
 # Memory Bank — Rules for AI Assistant
 
-Ты должен использовать MCP-сервер `memory-bank` для сохранения контекста между сессиями.  
-Это твоя долговременная память. Не игнорируй её.
+You must use the `memory-bank` MCP server to preserve context between sessions.  
+This is your long-term memory. Do not ignore it.
 
 ---
 
-## Доступные инструменты
+## Available Tools
 
-| Инструмент | Назначение |
+| Tool | Purpose |
 |---|---|
-| `memory_bank_read_context()` | Читает метаданные всех документов + контент core-документов |
-| `memory_bank_read_documents(names)` | Читает полный контент конкретных документов по именам |
-| `memory_bank_write_document(name, content, tags, core)` | Создаёт или обновляет документ |
-| `memory_bank_search_by_tags(tags)` | Ищет документы по тегам, возвращает только метаданные |
+| `memory_bank_read_context()` | Reads metadata of all documents + content of core documents |
+| `memory_bank_read_documents(names)` | Reads full content of specific documents by name |
+| `memory_bank_write_document(name, content, tags, core)` | Creates or updates a document |
+| `memory_bank_search_by_tags(tags)` | Searches documents by tags, returns metadata only |
 
 ---
 
-## Протокол работы
+## Working Protocol
 
-### В НАЧАЛЕ каждой сессии
+### AT THE START of each session
 
-1. **Сразу вызови `memory_bank_read_context()`** — до начала любой работы.
-2. Из ответа ты получишь:
-   - Список всех документов с метаданными (name, tags, core, lastModified)
-   - Полный контент core-документов (`core=true`)
-3. Проанализируй core-документы: пойми проект, текущую задачу, последний прогресс.
-4. При необходимости дочитай нужные документы через `memory_bank_read_documents`.
+1. **Immediately call `memory_bank_read_context()`** — before doing any work.
+2. From the response you will receive:
+   - A list of all documents with metadata (name, tags, core, lastModified)
+   - Full content of core documents (`core=true`)
+3. Analyze the core documents: understand the project, the current task, and the last progress.
+4. If needed, read additional documents via `memory_bank_read_documents`.
 
-**Если Memory Bank пуст** (пришёл пустой массив `documents`) — выполни первоначальную инициализацию:
+**If Memory Bank is empty** (an empty `documents` array was returned) — perform initial setup:
 
-**Шаг 1.** Изучи проект: используй `list_files` (рекурсивно) и `list_code_definition_names` чтобы понять структуру.
+**Step 1.** Explore the project: use `list_files` (recursively) and `list_code_definition_names` to understand the structure.
 
-**Шаг 2.** Создай стартовые документы:
+**Step 2.** Create the starter documents:
 
 ```
 memory_bank_write_document(
   name: "context.md",
-  content: "# Проект: <название>\n\n## Цель\n<цель проекта>\n\n## Технологии\n<стек>\n\n## Ограничения\n<если есть>",
+  content: "# Project: <name>\n\n## Goal\n<project goal>\n\n## Technologies\n<stack>\n\n## Constraints\n<if any>",
   tags: ["context", "global"],
   core: true
 )
 
 memory_bank_write_document(
   name: "projectStructure.md",
-  content: "# Структура проекта\n\n## Директории\n<дерево ключевых папок с описанием>\n\n## Модули\n<список модулей и их назначение>\n\n## Ключевые файлы\n<точки входа, конфиги, основные классы>\n\n## Связи\n<кто от кого зависит, основные потоки данных>",
+  content: "# Project Structure\n\n## Directories\n<key folder tree with descriptions>\n\n## Modules\n<list of modules and their purpose>\n\n## Key Files\n<entry points, configs, main classes>\n\n## Dependencies\n<who depends on what, main data flows>",
   tags: ["structure", "global"],
   core: true
 )
 
 memory_bank_write_document(
   name: "activeTask.md",
-  content: "# Текущая задача: <название>\n\n## Описание\n<что нужно сделать>\n\n## Следующие шаги\n- <шаг 1>",
+  content: "# Current Task: <name>\n\n## Description\n<what needs to be done>\n\n## Next Steps\n- <step 1>",
   tags: ["task", "active"],
   core: true
 )
@@ -58,94 +58,94 @@ memory_bank_write_document(
 
 ---
 
-### ВО ВРЕМЯ работы
+### DURING work
 
-- При любом **значимом решении** немедленно обновляй соответствующий документ.
-- Используй `memory_bank_search_by_tags` чтобы найти связанные документы перед важными решениями.
-- После поиска дочитывай нужные документы через `memory_bank_read_documents`.
-- Обновляй `activeTask.md` при смене подзадачи или появлении блокировок.
+- On any **significant decision**, immediately update the relevant document.
+- Use `memory_bank_search_by_tags` to find related documents before making important decisions.
+- After searching, read the needed documents in full via `memory_bank_read_documents`.
+- Update `activeTask.md` when switching subtasks or when a blocker appears.
 
-**Что считается значимым:**
-- Принятое архитектурное или техническое решение
-- Завершённый этап работы
-- Изменение цели или подхода
-- Выявленная блокировка или проблема
-- Добавление нового модуля, переименование или реструктуризация проекта → обновляй `projectStructure.md`
-
----
-
-### В КОНЦЕ сессии
-
-Перед завершением работы обязательно:
-
-1. Обнови `activeTask.md` — зафикисруй что сделано, что осталось, следующий шаг.
-2. Добавь запись в `progress.md` (создай, если не существует).
-3. Если принимались архитектурные решения — обнови `architecture.md`.
+**What counts as significant:**
+- An architectural or technical decision made
+- A completed phase of work
+- A change of goal or approach
+- A blocker or problem identified
+- Adding a new module, renaming, or restructuring the project → update `projectStructure.md`
 
 ---
 
-## Правила написания документов
+### AT THE END of the session
 
-### Формат
-Всегда используй Markdown с чёткими заголовками `##` и списками `-`.
+Before finishing work, you must:
 
-### Теги
-- Минимум 2 тега на документ.
-- Теги — строчные, английские: `database`, `auth`, `api`, `decision`, `bug`.
-- Будь последователен: если использовал `database` — не пиши `db` в другом документе.
-
-### Флаг `core`
-- `core: true` — только для документов, которые **нужны при каждом старте**: `context.md`, `projectStructure.md`, `activeTask.md`.
-- Всё остальное — `core: false`. Не злоупотребляй, это загрязняет контекст.
-
-### Что НЕ хранить
-- Большие фрагменты кода (для этого есть файлы проекта)
-- Полные логи выполнения команд
-- Временные заметки и черновики
-- Информацию, которая уже есть в коде проекта
+1. Update `activeTask.md` — record what was done, what remains, and the next step.
+2. Add an entry to `progress.md` (create it if it does not exist).
+3. If architectural decisions were made — update `architecture.md`.
 
 ---
 
-## Рекомендуемые документы
+## Document Writing Rules
 
-| Имя | Назначение | core |
+### Format
+Always use Markdown with clear `##` headings and `-` lists.
+
+### Tags
+- Minimum 2 tags per document.
+- Tags must be lowercase English: `database`, `auth`, `api`, `decision`, `bug`.
+- Be consistent: if you used `database` — do not write `db` in another document.
+
+### The `core` flag
+- `core: true` — only for documents **needed at every startup**: `context.md`, `projectStructure.md`, `activeTask.md`.
+- Everything else — `core: false`. Do not overuse this flag; it pollutes the context.
+
+### What NOT to store
+- Large code fragments (that is what the project files are for)
+- Full command execution logs
+- Temporary notes and drafts
+- Information that is already present in the project code
+
+---
+
+## Recommended Documents
+
+| Name | Purpose | core |
 |---|---|---|
-| `context.md` | Цель проекта, стек, ограничения | ✅ |
-| `projectStructure.md` | Структура директорий, модули, связи между компонентами | ✅ |
-| `activeTask.md` | Текущая задача, прогресс, блокировки, следующие шаги | ✅ |
-| `progress.md` | Журнал выполненных задач по датам | ❌ |
-| `architecture.md` | Ключевые архитектурные и технические решения | ❌ |
+| `context.md` | Project goal, stack, constraints | ✅ |
+| `projectStructure.md` | Directory structure, modules, component relationships | ✅ |
+| `activeTask.md` | Current task, progress, blockers, next steps | ✅ |
+| `progress.md` | Log of completed tasks by date | ❌ |
+| `architecture.md` | Key architectural and technical decisions | ❌ |
 
 ---
 
-## Примеры
+## Examples
 
-### Начало сессии
+### Start of session
 ```
 memory_bank_read_context()
 ```
-→ Читаю context.md, projectStructure.md и activeTask.md автоматически. Понимаю проект, его структуру и где мы остановились.
+→ Reads context.md, projectStructure.md and activeTask.md automatically. Understand the project, its structure, and where we left off.
 
 ---
 
-### Пользователь упомянул тему — ищу связанные документы
+### User mentioned a topic — search for related documents
 ```
 memory_bank_search_by_tags(tags: ["database"])
 ```
-→ Получаю список документов с тегом "database" (только метаданные).
+→ Get a list of documents tagged "database" (metadata only).
 
 ```
 memory_bank_read_documents(names: ["architecture.md"])
 ```
-→ Дочитываю нужный документ полностью.
+→ Read the needed document in full.
 
 ---
 
-### Принято решение по архитектуре
+### Architectural decision made
 ```
 memory_bank_write_document(
   name: "architecture.md",
-  content: "# Архитектурные решения\n\n## 2026-03-09: Выбор СУБД\n\nИспользуем PostgreSQL 15+.\n\n**Причины:**\n- Открытый исходный код\n- Поддержка JSON\n- Надёжность\n\n**Альтернативы:** MySQL (отклонён из-за лицензии), MongoDB (не подходит для реляционных данных).",
+  content: "# Architectural Decisions\n\n## 2026-03-09: Database Selection\n\nUsing PostgreSQL 15+.\n\n**Reasons:**\n- Open source\n- JSON support\n- Reliability\n\n**Alternatives:** MySQL (rejected due to license), MongoDB (not suitable for relational data).",
   tags: ["decision", "architecture", "database"],
   core: false
 )
@@ -153,11 +153,11 @@ memory_bank_write_document(
 
 ---
 
-### Завершена подзадача — обновляю activeTask
+### Subtask completed — update activeTask
 ```
 memory_bank_write_document(
   name: "activeTask.md",
-  content: "# Текущая задача: Настройка подключения к БД\n\n## Выполнено\n- [x] Выбрана СУБД (PostgreSQL)\n- [x] Создана конфигурация подключения\n\n## Следующие шаги\n- [ ] Написать миграции\n- [ ] Создать модели данных\n\n## Блокировки\n- Ожидаем решения по ORM",
+  content: "# Current Task: Database Connection Setup\n\n## Done\n- [x] Database selected (PostgreSQL)\n- [x] Connection configuration created\n\n## Next Steps\n- [ ] Write migrations\n- [ ] Create data models\n\n## Blockers\n- Waiting for ORM decision",
   tags: ["task", "active", "database"],
   core: true
 )
@@ -165,11 +165,11 @@ memory_bank_write_document(
 
 ---
 
-### Конец сессии — фиксирую прогресс
+### End of session — record progress
 ```
 memory_bank_write_document(
   name: "progress.md",
-  content: "# Лог выполнения\n\n## 2026-03-09\n- [x] Выбрана и настроена СУБД PostgreSQL\n- [x] Создана структура таблиц\n- [ ] Миграции — в процессе\n\n## Проблемы\n- Высокая задержка при первом подключении",
+  content: "# Execution Log\n\n## 2026-03-09\n- [x] PostgreSQL selected and configured\n- [x] Table structure created\n- [ ] Migrations — in progress\n\n## Issues\n- High latency on first connection",
   tags: ["progress", "log", "2026-03-09"],
   core: false
 )
