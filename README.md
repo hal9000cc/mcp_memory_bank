@@ -1,5 +1,5 @@
 ![PyPI - Version](https://img.shields.io/pypi/v/mcp-memory-bank)
-![GitHub License](https://img.shields.io/github/license/hal9000cc/mcp-memory-bank)
+![GitHub License](https://img.shields.io/github/license/hal9000cc/mcp_memory_bank)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mcp-memory-bank)
 # MCP Memory Bank
 
