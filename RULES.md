@@ -5,14 +5,25 @@ This is your long-term memory. Do not ignore it.
 
 ---
 
+## project_id — Required Parameter
+
+**Every tool call requires a `project_id` parameter.**
+
+Use the **absolute path to the project root directory** (Current Working Directory) as `project_id`.  
+This ensures each project has its own isolated memory bank.
+
+Example: if the Current Working Directory is `/home/user/projects/my_app`, pass `project_id="/home/user/projects/my_app"`.
+
+---
+
 ## Available Tools
 
 | Tool | Purpose |
 |---|---|
-| `memory_bank_read_context()` | Reads metadata of all documents + content of core documents |
-| `memory_bank_read_documents(names)` | Reads full content of specific documents by name |
-| `memory_bank_write_document(name, content, tags, core)` | Creates or updates a document |
-| `memory_bank_search_by_tags(tags)` | Searches documents by tags, returns metadata only |
+| `memory_bank_read_context(project_id)` | Reads metadata of all documents + content of core documents |
+| `memory_bank_read_documents(project_id, names)` | Reads full content of specific documents by name |
+| `memory_bank_write_document(project_id, name, content, tags, core)` | Creates or updates a document |
+| `memory_bank_search_by_tags(project_id, tags)` | Searches documents by tags, returns metadata only |
 
 ---
 
@@ -20,14 +31,18 @@ This is your long-term memory. Do not ignore it.
 
 ### AT THE START of each session
 
-1. **Immediately call `memory_bank_read_context()`** — before doing any work.
+1. **Immediately call `memory_bank_read_context(project_id=<cwd>)`** — before doing any work.
 2. From the response you will receive:
    - A list of all documents with metadata (name, tags, core, lastModified)
    - Full content of core documents (`core=true`)
 3. Analyze the core documents: understand the project, the current task, and the last progress.
 4. If needed, read additional documents via `memory_bank_read_documents`.
 
-**If Memory Bank is empty** (an empty `documents` array was returned) — perform initial setup:
+**If Memory Bank is empty** (an empty `documents` array was returned) — **ask the user first**:
+
+> "Memory Bank is empty. Should I initialize it now? I will scan the project files (`list_files` + `list_code_definition_names`) and create starter documents (`context.md`, `projectStructure.md`, `activeTask.md`). On large projects this may consume a noticeable number of tokens."
+
+**Only if the user confirms**, proceed with initialization:
 
 **Step 1.** Explore the project: use `list_files` (recursively) and `list_code_definition_names` to understand the structure.
 
@@ -35,6 +50,7 @@ This is your long-term memory. Do not ignore it.
 
 ```
 memory_bank_write_document(
+  project_id: "<current working directory>",
   name: "context.md",
   content: "# Project: <name>\n\n## Goal\n<project goal>\n\n## Technologies\n<stack>\n\n## Constraints\n<if any>",
   tags: ["context", "global"],
@@ -42,6 +58,7 @@ memory_bank_write_document(
 )
 
 memory_bank_write_document(
+  project_id: "<current working directory>",
   name: "projectStructure.md",
   content: "# Project Structure\n\n## Directories\n<key folder tree with descriptions>\n\n## Modules\n<list of modules and their purpose>\n\n## Key Files\n<entry points, configs, main classes>\n\n## Dependencies\n<who depends on what, main data flows>",
   tags: ["structure", "global"],
@@ -49,6 +66,7 @@ memory_bank_write_document(
 )
 
 memory_bank_write_document(
+  project_id: "<current working directory>",
   name: "activeTask.md",
   content: "# Current Task: <name>\n\n## Description\n<what needs to be done>\n\n## Next Steps\n- <step 1>",
   tags: ["task", "active"],
@@ -122,7 +140,7 @@ Always use Markdown with clear `##` headings and `-` lists.
 
 ### Start of session
 ```
-memory_bank_read_context()
+memory_bank_read_context(project_id="/home/user/projects/my_app")
 ```
 → Reads context.md, projectStructure.md and activeTask.md automatically. Understand the project, its structure, and where we left off.
 
@@ -130,12 +148,12 @@ memory_bank_read_context()
 
 ### User mentioned a topic — search for related documents
 ```
-memory_bank_search_by_tags(tags: ["database"])
+memory_bank_search_by_tags(project_id="/home/user/projects/my_app", tags=["database"])
 ```
 → Get a list of documents tagged "database" (metadata only).
 
 ```
-memory_bank_read_documents(names: ["architecture.md"])
+memory_bank_read_documents(project_id="/home/user/projects/my_app", names=["architecture.md"])
 ```
 → Read the needed document in full.
 
@@ -144,6 +162,7 @@ memory_bank_read_documents(names: ["architecture.md"])
 ### Architectural decision made
 ```
 memory_bank_write_document(
+  project_id: "/home/user/projects/my_app",
   name: "architecture.md",
   content: "# Architectural Decisions\n\n## 2026-03-09: Database Selection\n\nUsing PostgreSQL 15+.\n\n**Reasons:**\n- Open source\n- JSON support\n- Reliability\n\n**Alternatives:** MySQL (rejected due to license), MongoDB (not suitable for relational data).",
   tags: ["decision", "architecture", "database"],
@@ -156,6 +175,7 @@ memory_bank_write_document(
 ### Subtask completed — update activeTask
 ```
 memory_bank_write_document(
+  project_id: "/home/user/projects/my_app",
   name: "activeTask.md",
   content: "# Current Task: Database Connection Setup\n\n## Done\n- [x] Database selected (PostgreSQL)\n- [x] Connection configuration created\n\n## Next Steps\n- [ ] Write migrations\n- [ ] Create data models\n\n## Blockers\n- Waiting for ORM decision",
   tags: ["task", "active", "database"],
@@ -168,6 +188,7 @@ memory_bank_write_document(
 ### End of session — record progress
 ```
 memory_bank_write_document(
+  project_id: "/home/user/projects/my_app",
   name: "progress.md",
   content: "# Execution Log\n\n## 2026-03-09\n- [x] PostgreSQL selected and configured\n- [x] Table structure created\n- [ ] Migrations — in progress\n\n## Issues\n- High latency on first connection",
   tags: ["progress", "log", "2026-03-09"],

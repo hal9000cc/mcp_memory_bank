@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mcp-memory-bank"
-version = "0.1.0"
+version = "1.0.0"
 description = "Persistent memory server for AI assistants via Model Context Protocol"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -13,7 +13,7 @@ authors = [
 ]
 keywords = ["mcp", "memory", "memory bank", "mcp memory bank", "ai", "assistant", "context"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -26,6 +26,7 @@ requires-python = ">=3.11"
 dependencies = [
     "mcp>=1.0.0",
     "python-frontmatter>=1.1.0",
+    "platformdirs>=4.0.0",
 ]
 
 [project.urls]

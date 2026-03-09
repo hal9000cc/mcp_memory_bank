@@ -6,25 +6,41 @@ import json
 import logging
 import sys
 from pathlib import Path
+from typing import Optional
 
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from .storage import MemoryBankStorage
+from .storage import MemoryBankStorage, resolve_storage_path
 
 logger = logging.getLogger("memory-bank")
 
-_storage: MemoryBankStorage | None = None
+# Per-project storage cache: project_id -> MemoryBankStorage
+_storages: dict[str, MemoryBankStorage] = {}
+_base_dir: Optional[Path] = None
+_project_local: bool = False
 _response_delay_ms: int = 0
 
 app = Server("memory-bank")
 
+PROJECT_ID_SCHEMA = {
+    "project_id": {
+        "type": "string",
+        "description": (
+            "Unique project identifier. Use the absolute path to the project root "
+            "(Current Working Directory) if available."
+        ),
+    }
+}
 
-def _get_storage() -> MemoryBankStorage:
-    if _storage is None:
-        raise RuntimeError("Storage not initialized")
-    return _storage
+
+def _get_storage(project_id: str) -> MemoryBankStorage:
+    if project_id not in _storages:
+        path = resolve_storage_path(project_id, _base_dir, _project_local)
+        logger.info("initializing storage for project '%s' at %s", project_id, path)
+        _storages[project_id] = MemoryBankStorage(path)
+    return _storages[project_id]
 
 
 # ------------------------------------------------------------------
@@ -43,7 +59,8 @@ async def list_tools() -> list[Tool]:
             ),
             inputSchema={
                 "type": "object",
-                "properties": {},
+                "properties": PROJECT_ID_SCHEMA,
+                "required": ["project_id"],
             },
         ),
         Tool(
@@ -52,14 +69,15 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
+                    **PROJECT_ID_SCHEMA,
                     "names": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "List of document names to read (e.g. ['architecture.md'])",
                         "minItems": 1,
-                    }
+                    },
                 },
-                "required": ["names"],
+                "required": ["project_id", "names"],
             },
         ),
         Tool(
@@ -71,6 +89,7 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
+                    **PROJECT_ID_SCHEMA,
                     "name": {
                         "type": "string",
                         "description": "Document filename, e.g. 'activeTask.md'",
@@ -91,7 +110,7 @@ async def list_tools() -> list[Tool]:
                         "default": False,
                     },
                 },
-                "required": ["name", "content", "tags"],
+                "required": ["project_id", "name", "content", "tags"],
             },
         ),
         Tool(
@@ -103,14 +122,15 @@ async def list_tools() -> list[Tool]:
             inputSchema={
                 "type": "object",
                 "properties": {
+                    **PROJECT_ID_SCHEMA,
                     "tags": {
                         "type": "array",
                         "items": {"type": "string"},
                         "description": "Tags to search for (document must have all of them)",
                         "minItems": 1,
-                    }
+                    },
                 },
-                "required": ["tags"],
+                "required": ["project_id", "tags"],
             },
         ),
     ]
@@ -126,14 +146,20 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     t0 = time.monotonic()
     logger.debug(">>> call_tool: name=%s, args=%s", name, arguments)
     try:
-        storage = _get_storage()
+        project_id = arguments.get("project_id", "")
+        if not project_id:
+            return [TextContent(type="text", text=json.dumps({"error": "project_id is required"}))]
+        storage = _get_storage(project_id)
         result = _dispatch_tool(name, arguments, storage)
         if _response_delay_ms > 0:
             logger.debug("call_tool: sleeping %dms before response", _response_delay_ms)
             await asyncio.sleep(_response_delay_ms / 1000)
         elapsed = time.monotonic() - t0
         total_len = sum(len(c.text) for c in result)
-        logger.debug("<<< call_tool: name=%s, elapsed=%.3fs (delay=%dms), response_bytes=%d", name, elapsed, _response_delay_ms, total_len)
+        logger.debug(
+            "<<< call_tool: name=%s, project=%s, elapsed=%.3fs (delay=%dms), response_bytes=%d",
+            name, project_id, elapsed, _response_delay_ms, total_len,
+        )
         return result
     except Exception:
         elapsed = time.monotonic() - t0
@@ -242,11 +268,18 @@ def _handle_search_by_tags(storage: MemoryBankStorage, tags: list[str]) -> list[
 # Entry point
 # ------------------------------------------------------------------
 
-async def _run(base_dir: Path, response_delay_ms: int = 0) -> None:
-    global _storage, _response_delay_ms
+async def _run(
+    base_dir: Optional[Path],
+    project_local: bool = False,
+    response_delay_ms: int = 0,
+) -> None:
+    global _base_dir, _project_local, _response_delay_ms
+    _base_dir = base_dir
+    _project_local = project_local
     _response_delay_ms = response_delay_ms
-    logger.info("starting memory-bank server, storage: %s, response_delay=%dms", base_dir, response_delay_ms)
-    _storage = MemoryBankStorage(base_dir)
+
+    mode = "project-local" if project_local else f"global ({base_dir or 'platformdirs default'})"
+    logger.info("starting memory-bank server, mode=%s, response_delay=%dms", mode, response_delay_ms)
 
     async with stdio_server() as (read_stream, write_stream):
         await app.run(read_stream, write_stream, app.create_initialization_options())
@@ -260,15 +293,30 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  mcp-memory-bank --dir /path/to/project/.memory_bank\n"
-            "  mcp-memory-bank  # uses .memory_bank/ in current directory\n"
+            "  mcp-memory-bank                        # global storage, auto path\n"
+            "  mcp-memory-bank --dir /data/membank    # global storage, custom root\n"
+            "  mcp-memory-bank --project-local        # store inside each project\n"
         ),
     )
     parser.add_argument(
         "--dir",
         type=Path,
-        default=Path.cwd() / ".memory_bank",
-        help="Path to the memory bank storage directory (default: .memory_bank/ in cwd)",
+        default=None,
+        help=(
+            "Root directory for the global storage "
+            "(default: OS user data dir via platformdirs). "
+            "Ignored when --project-local is set."
+        ),
+    )
+    parser.add_argument(
+        "--project-local",
+        action="store_true",
+        default=False,
+        help=(
+            "Store memory bank inside each project directory "
+            "(<project_id>/.memory_bank/). "
+            "project_id must be an absolute path to the project root."
+        ),
     )
     parser.add_argument(
         "--log-level",
@@ -287,7 +335,7 @@ def main() -> None:
         type=int,
         default=0,
         metavar="MS",
-        help="Delay in milliseconds before sending each tool response (default: 0). Useful for debugging.",
+        help="Delay in milliseconds before sending each tool response (default: 0).",
     )
     args = parser.parse_args()
 
@@ -303,13 +351,16 @@ def main() -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     ))
 
-    # Configure only our namespace to avoid noise from mcp SDK
     root_logger = logging.getLogger("memory-bank")
     root_logger.setLevel(args.log_level)
     root_logger.addHandler(handler)
     root_logger.propagate = False
 
     try:
-        asyncio.run(_run(args.dir, response_delay_ms=args.response_delay))
+        asyncio.run(_run(
+            base_dir=args.dir,
+            project_local=args.project_local,
+            response_delay_ms=args.response_delay,
+        ))
     except KeyboardInterrupt:
         sys.exit(0)

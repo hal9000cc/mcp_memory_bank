@@ -1,5 +1,6 @@
-# Memory Bank storage (developer-specific)
+# Developer-specific files
 .memory_bank/
+.clinerules
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

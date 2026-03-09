@@ -16,14 +16,17 @@ from mcp_memory_bank.server import (
 )
 from mcp_memory_bank.storage import MemoryBankStorage
 
+TEST_PROJECT_ID = "/home/test/my_project"
+
 
 @pytest.fixture(autouse=True)
 def inject_storage(tmp_path: pathlib.Path):
     """Inject a fresh storage instance into the server module for every test."""
     storage = MemoryBankStorage(tmp_path / ".memory_bank")
-    server_module._storage = storage
+    server_module._storages.clear()
+    server_module._storages[TEST_PROJECT_ID] = storage
     yield storage
-    server_module._storage = None
+    server_module._storages.clear()
 
 
 def _json(text_contents) -> dict:
@@ -49,6 +52,14 @@ def test_list_tools_names():
         "memory_bank_write_document",
         "memory_bank_search_by_tags",
     }
+
+
+def test_list_tools_all_have_project_id():
+    tools = asyncio.run(list_tools())
+    for tool in tools:
+        props = tool.inputSchema.get("properties", {})
+        assert "project_id" in props, f"Tool {tool.name} missing project_id"
+        assert "project_id" in tool.inputSchema.get("required", [])
 
 
 # ------------------------------------------------------------------
@@ -176,6 +187,7 @@ def test_search_by_tags_no_content_returned(inject_storage):
 async def test_call_tool_routing_write(inject_storage):
     from mcp_memory_bank.server import call_tool
     result = _json(await call_tool("memory_bank_write_document", {
+        "project_id": TEST_PROJECT_ID,
         "name": "routed.md",
         "content": "# Routed",
         "tags": ["route", "test"],
@@ -184,7 +196,14 @@ async def test_call_tool_routing_write(inject_storage):
 
 
 @pytest.mark.asyncio
+async def test_call_tool_missing_project_id(inject_storage):
+    from mcp_memory_bank.server import call_tool
+    result = _json(await call_tool("memory_bank_read_context", {}))
+    assert "error" in result
+
+
+@pytest.mark.asyncio
 async def test_call_tool_unknown_tool(inject_storage):
     from mcp_memory_bank.server import call_tool
-    result = _json(await call_tool("nonexistent_tool", {}))
+    result = _json(await call_tool("nonexistent_tool", {"project_id": TEST_PROJECT_ID}))
     assert "error" in result

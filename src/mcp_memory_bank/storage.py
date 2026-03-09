@@ -1,5 +1,6 @@
 """Document storage: Markdown files with YAML frontmatter + SQLite index."""
 
+import hashlib
 import json
 import logging
 import sqlite3
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 import frontmatter
+from platformdirs import user_data_dir
 
 from .models import Document
 
@@ -15,6 +17,33 @@ logger = logging.getLogger("memory-bank.storage")
 
 DOCUMENTS_DIR = "documents"
 INDEX_DB = "index.db"
+
+
+def _project_slug(project_id: str) -> str:
+    """Convert project_id to a safe directory name: <last_component>_<8-char-hash>."""
+    last_part = Path(project_id).name or "default"
+    safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in last_part)
+    hash_suffix = hashlib.sha256(project_id.encode()).hexdigest()[:8]
+    return f"{safe_name}_{hash_suffix}"
+
+
+def resolve_storage_path(project_id: str, base_dir: Optional[Path], project_local: bool) -> Path:
+    """Return the storage directory for a given project_id.
+
+    Global mode (project_local=False):
+        <base_dir>/projects/<slug>/
+        base_dir defaults to the OS user data directory if not provided.
+
+    Local mode (project_local=True):
+        <project_id>/.memory_bank/
+        project_id must be an absolute path to the project root.
+    """
+    if project_local:
+        return Path(project_id) / ".memory_bank"
+    if base_dir is None:
+        base_dir = Path(user_data_dir("mcp-memory-bank"))
+    slug = _project_slug(project_id)
+    return base_dir / "projects" / slug
 
 
 class MemoryBankStorage:
