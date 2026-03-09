@@ -1,63 +1,66 @@
+![PyPI - Version](https://img.shields.io/pypi/v/mcp-memory-bank)
+![GitHub License](https://img.shields.io/github/license/hal9000cc/mcp-memory-bank)
+![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mcp-memory-bank)
 # MCP Memory Bank
 
-Сервер долговременной памяти для AI-ассистентов, реализованный как MCP-сервер (Model Context Protocol).  
-Позволяет сохранять и восстанавливать контекст между сессиями.
+A long-term memory server for AI assistants, implemented as an MCP server (Model Context Protocol).  
+Allows you to save and restore context between sessions. Requires Python 3.10+.
 
-## Зачем это нужно?
+## Why do you need this?
 
-### 💰 Экономия токенов
+### 💰 Token savings
 
-Основные затраты при работе с ИИ‑ассистентами (особенно в разработке) приходятся на чтение контекста. Каждый лишний файл, прочитанный агентом, попадает в контекст и оплачивается при каждом запросе.
+The main cost when working with AI assistants (especially in development) comes from reading context. Every extra file read by the agent ends up in the context and is paid for on every request.
 
-Memory Bank решает эту проблему так:
+Memory Bank solves this problem by:
 
-- При старте сессии ассистент получает только самое важное — документы с флагом `core`.
-- Остальные знания подгружаются по запросу, только когда действительно нужны.
-- Агент перестаёт бесцельно читать файлы проекта, а сразу знает архитектуру, текущую задачу, ограничения и состояние дел.
+- At session start, the assistant only receives what matters most — documents with the `core` flag.
+- Other knowledge is loaded on demand, only when actually needed.
+- The agent stops aimlessly reading project files and immediately knows the architecture, current task, constraints, and status.
 
-### 🧠 Долговременная память
+### 🧠 Long-term memory
 
-Обычный ассистент забывает всё после закрытия чата. Memory Bank сохраняет принятые решения, архитектурные особенности, договорённости и любой другой важный контекст между сессиями.
+A regular assistant forgets everything after the chat is closed. Memory Bank preserves decisions made, architectural details, agreements, and any other important context between sessions.
 
-- Никаких повторных объяснений — агент помнит, почему выбрана именно эта СУБД, какие ограничения были наложены, какие архитектурные компромиссы приняты.
-- При возобновлении работы (даже через неделю, месяц) ассистент сразу в курсе последнего состояния проекта.
-- Все изменения синхронизируются автоматически — агент сам пишет документы через предоставленные инструменты.
+- No repeated explanations — the agent remembers why this particular database was chosen, what constraints were imposed, what architectural trade-offs were made.
+- When resuming work (even after a week or a month), the assistant is immediately up to date with the last state of the project.
+- All changes are synchronized automatically — the agent writes documents itself using the provided tools.
 
-### ✅ Управление задачами
+### ✅ Task management
 
-Memory Bank помогает организовать работу над проектом:
+Memory Bank helps organize work on a project:
 
-- Разбивайте крупную задачу на этапы.
-- Агент сам хранит список задач прямо в памяти проекта.
-- Утром спросите ассистента: «Какая у нас сегодня задача?» — и он ответит, сверившись с актуальным документом `activeTask.md`.
-- Агент отслеживает прогресс, фиксирует выполненные шаги и вы всегда остаетесь в курсе текущего состояния задач.
+- Break large tasks into stages.
+- The agent stores the task list directly in the project memory.
+- In the morning, ask the assistant: "What's our task for today?" — and it will answer by checking the current `activeTask.md` document.
+- The agent tracks progress, records completed steps, and you always stay informed about the current state of tasks.
 
 ---
 
-## Установка
+## Installation
 
 ```bash
 pip install mcp-memory-bank
 ```
 
-После установки команда `mcp-memory-bank` становится доступна в PATH. Если python установлен как-то не стандартно, этого может не произойти. В таком случае добавьте путь к исполняемому файлу вручную.
+After installation, the `mcp-memory-bank` command becomes available in PATH. If Python is installed in a non-standard way, this may not happen. In that case, add the path to the executable manually.
 
-Автор пользуется Cline, поэтому, ниже приводится настройка для Cline. Поскольку протокол стандартный, mcp-memory-bank должен работать и с другими AI агентами, но настройка может быть немного другой.
+The author uses Cline, so the configuration below is for Cline. Since the protocol is standard, mcp-memory-bank should work with other AI agents as well, but the configuration may differ slightly.
 
-## Настройка в Cline
+## Setup in Cline
 
-Откройте настройки Cline → **MCP Servers** → добавьте сервер вручную.
+Open Cline settings → **MCP Servers** → add the server manually.
 
-Выберите один из двух режимов хранения:
+Choose one of two storage modes:
 
 ---
 
-### Режим 1: Глобальное хранилище
+### Mode 1: Global storage
 
-Все проекты хранятся в одном месте, изолированно по `project_id`.  
-Данные по умолчанию хранятся в системной директории пользователя (через [platformdirs](https://platformdirs.readthedocs.io/)):
+All projects are stored in one place, isolated by `project_id`.  
+Data is stored by default in the user's system directory (via [platformdirs](https://platformdirs.readthedocs.io/)):
 
-| ОС | Путь |
+| OS | Path |
 |---|---|
 | Linux | `~/.local/share/mcp-memory-bank/` |
 | macOS | `~/Library/Application Support/mcp-memory-bank/` |
@@ -75,15 +78,15 @@ pip install mcp-memory-bank
 }
 ```
 
-Настраивается один раз — работает для всех проектов автоматически.  
-При каждом вызове инструмента агент передаёт `project_id` — и данные попадают в нужное хранилище.
+Configure once — works for all projects automatically.  
+On each tool call, the agent passes `project_id` — and the data goes to the correct storage.
 
 ---
 
-### Режим 2: Локальное хранилище в проекте (для Cline)
+### Mode 2: Local storage in the project (for Cline)
 
-Данные каждого проекта хранятся прямо в его директории (`.memory_bank/` внутри проекта).  
-Это удобно в Cline, поскольку агент получает путь к проекту через `Current Working Directory`.
+Each project's data is stored directly in its directory (`.memory_bank/` inside the project).  
+This is convenient in Cline, since the agent receives the project path via `Current Working Directory`.
 
 ```json
 {
@@ -98,40 +101,40 @@ pip install mcp-memory-bank
 }
 ```
 
-> **Важно:** в режиме `--project-local` параметр `project_id` используется как абсолютный путь к корню проекта.  
-> Cline передаёт его автоматически через `Current Working Directory`.
+> **Important:** in `--project-local` mode, the `project_id` parameter is used as an absolute path to the project root.  
+> Cline passes it automatically via `Current Working Directory`.
 
-Добавьте `.memory_bank/` в `.gitignore` проекта — память специфична для разработчика.
-
----
-
-### Подключение RULES.md
-
-Скопируйте файл [`RULES.md`](RULES.md) из этого репозитория в настройки инструкций Cline  
-(Settings → Custom Instructions) или добавьте в `.clinerules` вашего проекта — это научит ассистента работать с памятью.
-
-> **Важно:** по правилам агент должен инициализировать Memory Bank при первом запросе, если банк пуст. Однако иногда агент сразу фокусируется на вашей задаче и пропускает этот шаг. В этом случае просто попросите его: «Инициализируй Memory Bank».
+Add `.memory_bank/` to the project's `.gitignore` — memory is developer-specific.
 
 ---
 
-## Как это работает
+### Connecting RULES.md
 
-### Идентификация проекта
+Copy the [`RULES.md`](RULES.md) file from this repository to the Cline instructions settings  
+(Settings → Custom Instructions) or add it to your project's `.clinerules` — this will teach the assistant how to work with memory.
 
-Каждый вызов инструмента содержит параметр **`project_id`** — уникальный идентификатор проекта.  
-Сервер использует его для изоляции данных между проектами.
+> **Important:** according to the rules, the agent should initialize the Memory Bank on the first request if the bank is empty. However, sometimes the agent immediately focuses on your task and skips this step. In that case, simply ask: "Initialize the Memory Bank".
 
-Рекомендуется передавать **абсолютный путь к корню проекта** (для Cline — это `Current Working Directory`). При передаче пути в качестве project_id, появляется возможность использовать аргумент --project-local и хранить документы банка в папке проекта.
+---
 
-Но в качестве project_id допустим любой осмысленный строковый идентификатор, в этом случае возможно только глабальное хранилище, а аргумент --project-local использовать нельзя.
+## How it works
 
-### Хранилище
+### Project identification
 
-**Глобальный режим** — структура хранилища:
+Each tool call contains a **`project_id`** parameter — a unique project identifier.  
+The server uses it to isolate data between projects.
+
+It is recommended to pass the **absolute path to the project root** (for Cline — this is `Current Working Directory`). When passing a path as `project_id`, you can use the `--project-local` argument and store bank documents in the project folder.
+
+However, any meaningful string identifier is valid as `project_id`. In that case, only global storage is available and the `--project-local` argument cannot be used.
+
+### Storage
+
+**Global mode** — storage structure:
 ```
 ~/.local/share/mcp-memory-bank/
 └── projects/
-    ├── my_project_a1b2c3d4/    ← slug от project_id
+    ├── my_project_a1b2c3d4/    ← slug from project_id
     │   ├── documents/
     │   │   ├── context.md
     │   │   └── activeTask.md
@@ -140,7 +143,7 @@ pip install mcp-memory-bank
         └── ...
 ```
 
-**Локальный режим** (`--project-local`) — структура хранилища:
+**Local mode** (`--project-local`) — storage structure:
 ```
 /path/to/your/project/
 └── .memory_bank/
@@ -150,7 +153,7 @@ pip install mcp-memory-bank
     └── index.db
 ```
 
-Каждый документ — это человекочитаемый Markdown-файл с метаданными в YAML frontmatter:
+Each document is a human-readable Markdown file with metadata in YAML frontmatter:
 
 ```markdown
 ---
@@ -160,44 +163,44 @@ tags:
 core: false
 lastModified: '2026-03-09T01:00:00Z'
 ---
-# Архитектурные решения
+# Architectural Decisions
 
-## Выбор СУБД
+## Database Selection
 ...
 ```
 
-SQLite-индекс пересобирается автоматически при каждом запуске сервера — файлы остаются источником истины.
+The SQLite index is rebuilt automatically on every server start — files remain the source of truth.
 
 ---
 
-## Протокол
+## Protocol
 
-### Концепция
+### Concept
 
-- Вся информация хранится в виде **документов** (Markdown-текст + метаданные)
-- Каждый документ имеет: имя (`name`), контент (`content`), теги (`tags`), флаг `core` и дату изменения
-- Флаг `core=true` означает, что документ загружается **автоматически** при каждом старте сессии
-- Документы без `core` загружаются **по запросу** — для экономии контекста
+- All information is stored as **documents** (Markdown text + metadata)
+- Each document has: a name (`name`), content (`content`), tags (`tags`), a `core` flag, and a modification date
+- The `core=true` flag means the document is loaded **automatically** at every session start
+- Documents without `core` are loaded **on demand** — to save context
 
 ---
 
-### Инструменты (tools)
+### Tools
 
-Все инструменты принимают обязательный параметр **`project_id`**.
+All tools accept the required **`project_id`** parameter.
 
 #### `memory_bank_read_context(project_id)`
 
-Основной инструмент для начала сессии. Возвращает:
-- Метаданные **всех** документов (без контента)
-- Полный контент **только core-документов** (`core=true`)
+The main tool for starting a session. Returns:
+- Metadata of **all** documents (without content)
+- Full content of **core documents only** (`core=true`)
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Тип | Обязательный | Описание |
+| Parameter | Type | Required | Description |
 |---|---|---|---|
-| `project_id` | `string` | ✅ | Идентификатор проекта (рекомендуется — абсолютный путь к корню проекта) |
+| `project_id` | `string` | ✅ | Project identifier (recommended — absolute path to project root) |
 
-**Возвращает:**
+**Returns:**
 ```json
 {
   "documents": [
@@ -206,14 +209,14 @@ SQLite-индекс пересобирается автоматически пр
       "tags": ["context", "global"],
       "core": true,
       "lastModified": "2026-03-09T01:00:00Z",
-      "content": "# Проект: ...\n\n..."
+      "content": "# Project: ...\n\n..."
     },
     {
       "name": "activeTask.md",
       "tags": ["task", "active"],
       "core": true,
       "lastModified": "2026-03-09T01:15:00Z",
-      "content": "# Текущая задача: ...\n\n..."
+      "content": "# Current Task: ...\n\n..."
     },
     {
       "name": "architecture.md",
@@ -230,16 +233,16 @@ SQLite-индекс пересобирается автоматически пр
 
 #### `memory_bank_read_documents(project_id, names)`
 
-Читает один или несколько документов по имени.
+Reads one or more documents by name.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Тип | Обязательный | Описание |
+| Parameter | Type | Required | Description |
 |---|---|---|---|
-| `project_id` | `string` | ✅ | Идентификатор проекта |
-| `names` | `list[string]` | ✅ | Список имён документов |
+| `project_id` | `string` | ✅ | Project identifier |
+| `names` | `list[string]` | ✅ | List of document names |
 
-**Возвращает:**
+**Returns:**
 ```json
 {
   "documents": [
@@ -248,31 +251,31 @@ SQLite-индекс пересобирается автоматически пр
       "tags": ["decision", "architecture"],
       "core": false,
       "lastModified": "2026-03-08T18:00:00Z",
-      "content": "# Архитектурные решения\n\n## Выбор СУБД\n\nПринято решение использовать PostgreSQL..."
+      "content": "# Architectural Decisions\n\n## Database Selection\n\nDecided to use PostgreSQL..."
     }
   ]
 }
 ```
 
-Если документ не найден — возвращается `null` для соответствующего элемента.
+If a document is not found — `null` is returned for the corresponding element.
 
 ---
 
 #### `memory_bank_write_document(project_id, name, content, tags, core)`
 
-Создаёт новый документ или полностью перезаписывает существующий.
+Creates a new document or completely overwrites an existing one.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Тип | Обязательный | Описание |
+| Parameter | Type | Required | Description |
 |---|---|---|---|
-| `project_id` | `string` | ✅ | Идентификатор проекта |
-| `name` | `string` | ✅ | Имя документа (например, `activeTask.md`) |
-| `content` | `string` | ✅ | Содержимое в формате Markdown |
-| `tags` | `list[string]` | ✅ | Теги для поиска (минимум 2) |
-| `core` | `boolean` | ❌ | Загружать при старте сессии (default: `false`) |
+| `project_id` | `string` | ✅ | Project identifier |
+| `name` | `string` | ✅ | Document name (e.g., `activeTask.md`) |
+| `content` | `string` | ✅ | Content in Markdown format |
+| `tags` | `list[string]` | ✅ | Tags for search (minimum 2) |
+| `core` | `boolean` | ❌ | Load at session start (default: `false`) |
 
-**Возвращает:**
+**Returns:**
 ```json
 {
   "success": true,
@@ -285,17 +288,17 @@ SQLite-индекс пересобирается автоматически пр
 
 #### `memory_bank_search_by_tags(project_id, tags)`
 
-Поиск документов по тегам. Возвращает документы, у которых есть **все** указанные теги.  
-Контент **не возвращается** — только метаданные. Для чтения контента используй `read_documents`.
+Searches documents by tags. Returns documents that have **all** of the specified tags.  
+Content is **not returned** — only metadata. To read content, use `read_documents`.
 
-**Параметры:**
+**Parameters:**
 
-| Параметр | Тип | Обязательный | Описание |
+| Parameter | Type | Required | Description |
 |---|---|---|---|
-| `project_id` | `string` | ✅ | Идентификатор проекта |
-| `tags` | `list[string]` | ✅ | Список тегов (документ должен содержать все) |
+| `project_id` | `string` | ✅ | Project identifier |
+| `tags` | `list[string]` | ✅ | List of tags (document must contain all of them) |
 
-**Возвращает:**
+**Returns:**
 ```json
 {
   "documents": [
@@ -311,37 +314,37 @@ SQLite-индекс пересобирается автоматически пр
 
 ---
 
-### Рекомендуемые документы
+### Recommended documents
 
-| Имя | Назначение | Теги | core |
+| Name | Purpose | Tags | core |
 |---|---|---|---|
-| `context.md` | Цель проекта, технологии, ограничения | `context`, `global` | `true` |
-| `projectStructure.md` | Структура директорий, модули, связи между компонентами | `structure`, `global` | `true` |
-| `activeTask.md` | Текущая задача, последние действия, следующие шаги, блокировки | `task`, `active` | `true` |
-| `progress.md` | Журнал выполненных задач и этапов | `progress`, `log` | `false` |
-| `architecture.md` | Ключевые архитектурные и технические решения | `decision`, `architecture` | `false` |
+| `context.md` | Project goal, technologies, constraints | `context`, `global` | `true` |
+| `projectStructure.md` | Directory structure, modules, component relationships | `structure`, `global` | `true` |
+| `activeTask.md` | Current task, recent actions, next steps, blockers | `task`, `active` | `true` |
+| `progress.md` | Log of completed tasks and phases | `progress`, `log` | `false` |
+| `architecture.md` | Key architectural and technical decisions | `decision`, `architecture` | `false` |
 
-Имена документов — рекомендация. Допустимы любые осмысленные имена в формате `camelCase.md` или `kebab-case.md`.
+Document names are recommendations. Any meaningful names in `camelCase.md` or `kebab-case.md` format are allowed.
 
 ---
 
-## Аргументы командной строки
+## Command-line arguments
 
-| Аргумент | Тип | По умолчанию | Описание |
+| Argument | Type | Default | Description |
 |---|---|---|---|
-| `--dir` | путь | системная директория данных | Корневая директория глобального хранилища. Игнорируется при `--project-local` |
-| `--project-local` | флаг | выключен | Хранить данные внутри каждого проекта (`<project_id>/.memory_bank/`) |
-| `--log-level` | строка | `INFO` | Уровень логирования: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-| `--log-file` | путь | stderr | Файл для записи логов. Если не указан — логи выводятся в stderr |
-| `--response-delay` | число (мс) | `0` | Задержка перед отправкой ответа на каждый вызов инструмента |
+| `--dir` | path | system data directory | Root directory for global storage. Ignored with `--project-local` |
+| `--project-local` | flag | disabled | Store data inside each project (`<project_id>/.memory_bank/`) |
+| `--log-level` | string | `INFO` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `--log-file` | path | stderr | File for writing logs. If not specified — logs go to stderr |
+| `--response-delay` | number (ms) | `0` | Delay before sending a response to each tool call |
 
 ---
 
-### `--response-delay`: обход бага с extended thinking
+### `--response-delay`: workaround for extended thinking bug
 
-В Cline 3.71.0 при использовании моделей с extended thinking (например, Claude Opus с опцией «Extended thinking») возникает race condition: Cline не успевает передать thinking blocks обратно в API Claude до получения ответа от MCP-сервера. Это приводит к зависанию после надписи «Thinking...».
+In Cline 3.71.0, when using models with extended thinking (e.g., Claude Opus with the "Extended thinking" option), a race condition occurs: Cline doesn't have time to pass thinking blocks back to the Claude API before receiving a response from the MCP server. This causes a hang after the "Thinking..." message.
 
-**Решение:** добавьте задержку 100 мс — этого достаточно для устранения проблемы:
+**Fix:** add a 100 ms delay — this is enough to resolve the issue:
 
 ```json
 {
@@ -356,4 +359,4 @@ SQLite-индекс пересобирается автоматически пр
 }
 ```
 
-> **Примечание:** аргумент `--response-delay` актуален только при использовании extended thinking. При обычной работе задержку можно не указывать.
+> **Note:** the `--response-delay` argument is only relevant when using extended thinking. For regular usage, the delay can be omitted.
