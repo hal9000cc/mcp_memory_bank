@@ -203,6 +203,40 @@ class MemoryBankStorage:
             self._upsert_index(conn, doc)
         return doc
 
+    def append_content(
+        self,
+        name: str,
+        content: str,
+        tags: Optional[list[str]] = None,
+        core: bool = False,
+    ) -> tuple[Document, int]:
+        """Append content to an existing document without reading it into the caller's context.
+
+        If the document exists, the new content is appended with a blank line separator.
+        The existing tags and core flag are preserved.
+
+        If the document does not exist, it is created using the provided tags and core flag.
+        In this case tags must contain at least 2 items.
+
+        Returns a tuple of (saved Document, total content_length in characters).
+        """
+        existing = self._read_md(name)
+        if existing is not None:
+            base = existing.content or ""
+            new_content = base + "\n\n" + content if base else content
+            doc = self.write_document(
+                name=name,
+                content=new_content,
+                tags=existing.tags,
+                core=existing.core,
+            )
+        else:
+            if not tags or len(tags) < 2:
+                raise ValueError("tags (minimum 2) are required when creating a new document")
+            doc = self.write_document(name=name, content=content, tags=tags, core=core)
+
+        return doc, len(doc.content or "")
+
     def search_by_tags(self, tags: list[str]) -> list[Document]:
         """Return documents that have ALL specified tags (metadata only)."""
         if not tags:

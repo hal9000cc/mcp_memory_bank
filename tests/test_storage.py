@@ -177,3 +177,77 @@ def test_sync_picks_up_manually_added_file(tmp_storage):
     restarted = MemoryBankStorage(tmp_storage.base_dir)
     names = {d.name for d in restarted.read_all_metadata()}
     assert "manual.md" in names
+
+
+# ------------------------------------------------------------------
+# append_content
+# ------------------------------------------------------------------
+
+def test_append_to_existing_document(tmp_storage):
+    tmp_storage.write_document("log.md", "# Log\n\n## Day 1", ["log", "progress"])
+    doc, length = tmp_storage.append_content("log.md", "## Day 2\n- Done something")
+    loaded = tmp_storage.read_documents(["log.md"])[0]
+    assert "## Day 1" in loaded.content
+    assert "## Day 2" in loaded.content
+    assert "\n\n" in loaded.content
+    assert length == len(loaded.content)
+
+
+def test_append_separator_not_doubled_on_empty_content(tmp_storage):
+    tmp_storage.write_document("empty.md", "", ["a", "b"])
+    doc, _ = tmp_storage.append_content("empty.md", "First entry")
+    loaded = tmp_storage.read_documents(["empty.md"])[0]
+    assert loaded.content == "First entry"
+
+
+def test_append_preserves_existing_tags(tmp_storage):
+    tmp_storage.write_document("doc.md", "original", ["keep", "these"], core=True)
+    doc, _ = tmp_storage.append_content("doc.md", "extra")
+    assert doc.tags == ["keep", "these"]
+    assert doc.core is True
+
+
+def test_append_updates_last_modified(tmp_storage):
+    doc_before = tmp_storage.write_document("ts.md", "v1", ["a", "b"])
+    import time
+    time.sleep(0.01)
+    doc_after, _ = tmp_storage.append_content("ts.md", "v2")
+    assert doc_after.last_modified >= doc_before.last_modified
+
+
+def test_append_returns_correct_content_length(tmp_storage):
+    tmp_storage.write_document("len.md", "hello", ["a", "b"])
+    doc, length = tmp_storage.append_content("len.md", "world")
+    assert length == len(doc.content)
+    assert length > len("hello")
+
+
+def test_append_creates_new_document_with_tags(tmp_storage):
+    doc, length = tmp_storage.append_content(
+        "new_log.md", "## Entry 1", tags=["log", "progress"], core=False
+    )
+    assert doc.name == "new_log.md"
+    assert doc.tags == ["log", "progress"]
+    assert doc.core is False
+    assert length == len("## Entry 1")
+    assert tmp_storage.read_documents(["new_log.md"])[0] is not None
+
+
+def test_append_to_nonexistent_without_tags_raises(tmp_storage):
+    with pytest.raises(ValueError, match="tags"):
+        tmp_storage.append_content("ghost.md", "content")
+
+
+def test_append_to_nonexistent_with_one_tag_raises(tmp_storage):
+    with pytest.raises(ValueError, match="tags"):
+        tmp_storage.append_content("ghost.md", "content", tags=["only_one"])
+
+
+def test_append_multiple_times(tmp_storage):
+    tmp_storage.write_document("multi.md", "line1", ["a", "b"])
+    tmp_storage.append_content("multi.md", "line2")
+    tmp_storage.append_content("multi.md", "line3")
+    loaded = tmp_storage.read_documents(["multi.md"])[0]
+    assert "line1" in loaded.content
+    assert "line2" in loaded.content
+    assert "line3" in loaded.content

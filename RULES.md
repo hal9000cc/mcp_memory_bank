@@ -22,8 +22,32 @@ Example: if the Current Working Directory is `/home/user/projects/my_app`, pass 
 |---|---|
 | `memory_bank_read_context(project_id)` | Reads metadata of all documents + content of core documents |
 | `memory_bank_read_documents(project_id, names)` | Reads full content of specific documents by name |
-| `memory_bank_write_document(project_id, name, content, tags, core)` | Creates or updates a document |
+| `memory_bank_write_document(project_id, name, content, tags, core)` | Creates or fully overwrites a document |
+| `memory_bank_append_content(project_id, name, content, tags, core)` | Appends text to the end of a document without reading it first |
 | `memory_bank_search_by_tags(project_id, tags)` | Searches documents by tags, returns metadata only |
+
+### When to use `append_content` vs `write_document`
+
+- **`write_document`** — when you need to **restructure** or **rewrite** the entire document (e.g., updating `activeTask.md` with new task status)
+- **`append_content`** — when you need to **add a new entry** to a growing log (e.g., adding a session summary to `progress.md`)
+
+The key advantage of `append_content`: the server reads the file internally — the existing document content **never enters your context**. Use it for any log-style document that grows over time.
+
+---
+
+## Memory Bank in PLAN MODE
+
+Memory Bank writes **are allowed in PLAN MODE**. Unlike project files, Memory Bank documents are metadata and context — not code artifacts.
+
+Recording decisions, updating task status, and noting observations during planning is not just allowed but **encouraged**.
+
+In PLAN MODE you **should**:
+- Call `memory_bank_read_context` at session start (same as always)
+- Update `activeTask.md` when a task is selected, planned, or its status changes
+- Record architectural decisions as they emerge during planning
+- Update any Memory Bank document that reflects current understanding
+
+This is an explicit exception to the general "don't modify files in PLAN mode" guideline.
 
 ---
 
@@ -96,9 +120,43 @@ memory_bank_write_document(
 
 Before finishing work, you must:
 
-1. Update `activeTask.md` — record what was done, what remains, and the next step.
-2. Add an entry to `progress.md` (create it if it does not exist).
+1. **Update `activeTask.md`** (CRITICAL) — this is the **single source of truth** for task status.
+   - Move completed tasks from "Open Tasks" to "Recently Completed" with the date
+   - Update "Current Task" and "Next Steps"
+   - `activeTask.md` is loaded at every session start — task status MUST be reflected here
+   - Writing only to `progress.md` is NOT sufficient — the next session will not see it
+
+2. **Append to `progress.md`** (optional) — use `append_content` to add a session summary without reading the full log:
+   - When the session contained important details worth preserving for future reference
+   - `progress.md` is a historical log, NOT the source of truth for task status
+
 3. If architectural decisions were made — update `architecture.md`.
+
+#### Recommended `activeTask.md` structure
+
+```markdown
+# Task Tracker
+
+## Current Task: <name or "none">
+
+## Description
+<what we are doing right now>
+
+## Next Steps
+- [ ] step 1
+- [ ] step 2
+
+## Blockers
+- (if any)
+
+## Open Tasks
+- [ ] Task A
+- [ ] Task B
+
+## Recently Completed
+- [x] Task C (09.03.2026)
+- [x] Task D (08.03.2026)
+```
 
 ---
 
@@ -185,13 +243,34 @@ memory_bank_write_document(
 
 ---
 
-### End of session — record progress
+### End of session — append progress log
+
+Use `append_content` to add a session entry without reading the full log history:
+
+```
+memory_bank_append_content(
+  project_id: "/home/user/projects/my_app",
+  name: "progress.md",
+  content: "## 2026-03-09\n- [x] PostgreSQL selected and configured\n- [x] Table structure created\n- [ ] Migrations — in progress\n\n### Issues\n- High latency on first connection",
+  tags: ["progress", "log"],
+  core: false
+)
+```
+
+The `tags` parameter is only needed on first call (when the document doesn't exist yet). On subsequent calls it is ignored.
+
+---
+
+### End of session — update task status (CRITICAL)
+
+Always update `activeTask.md` to move completed tasks to "Recently Completed":
+
 ```
 memory_bank_write_document(
   project_id: "/home/user/projects/my_app",
-  name: "progress.md",
-  content: "# Execution Log\n\n## 2026-03-09\n- [x] PostgreSQL selected and configured\n- [x] Table structure created\n- [ ] Migrations — in progress\n\n## Issues\n- High latency on first connection",
-  tags: ["progress", "log", "2026-03-09"],
-  core: false
+  name: "activeTask.md",
+  content: "# Task Tracker\n\n## Current Task: none\n\n## Next Steps\n- [ ] Write migrations\n\n## Open Tasks\n- [ ] Write migrations\n- [ ] Create data models\n\n## Recently Completed\n- [x] Database selected and configured (09.03.2026)\n- [x] Table structure created (09.03.2026)",
+  tags: ["task", "active"],
+  core: true
 )
 ```

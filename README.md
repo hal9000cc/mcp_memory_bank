@@ -314,6 +314,39 @@ Content is **not returned** — only metadata. To read content, use `read_docume
 
 ---
 
+#### `memory_bank_append_content(project_id, name, content, tags, core)`
+
+Appends text to the end of an existing document **without reading its content into the LLM context**.  
+The server reads the file internally, appends the new content with a blank line separator, and saves it back.
+
+This is the preferred way to update log-style documents (e.g., `progress.md`) — it avoids loading the full document into context on every update.
+
+If the document does not exist, it will be created (tags are required in that case).
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `project_id` | `string` | ✅ | Project identifier |
+| `name` | `string` | ✅ | Document name (e.g., `progress.md`) |
+| `content` | `string` | ✅ | Markdown text to append at the end of the document |
+| `tags` | `list[string]` | ❌ | Required only when creating a new document (minimum 2). Ignored if document exists. |
+| `core` | `boolean` | ❌ | Used only when creating a new document (default: `false`) |
+
+**Returns:**
+```json
+{
+  "success": true,
+  "name": "progress.md",
+  "lastModified": "2026-03-09T21:00:00Z",
+  "contentLength": 1024
+}
+```
+
+`contentLength` — total length of the document content after the append (in characters).
+
+---
+
 ### Recommended documents
 
 | Name | Purpose | Tags | core |

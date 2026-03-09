@@ -133,6 +133,48 @@ async def list_tools() -> list[Tool]:
                 "required": ["project_id", "tags"],
             },
         ),
+        Tool(
+            name="memory_bank_append_content",
+            description=(
+                "Append text to the end of an existing document without reading its content. "
+                "The server reads the file internally, appends the new content with a blank line "
+                "separator, and saves it back. This is the preferred way to update log-style "
+                "documents (e.g. progress.md) as it avoids loading the full document into context. "
+                "If the document does not exist, it will be created (tags are required in that case)."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    **PROJECT_ID_SCHEMA,
+                    "name": {
+                        "type": "string",
+                        "description": "Document filename, e.g. 'progress.md'",
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "Markdown text to append at the end of the document",
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Tags for the document. Required only when creating a new document "
+                            "(minimum 2, lowercase English). Ignored if the document already exists."
+                        ),
+                        "minItems": 2,
+                    },
+                    "core": {
+                        "type": "boolean",
+                        "description": (
+                            "Load automatically at session start. "
+                            "Used only when creating a new document (default: false)."
+                        ),
+                        "default": False,
+                    },
+                },
+                "required": ["project_id", "name", "content"],
+            },
+        ),
     ]
 
 
@@ -190,6 +232,15 @@ def _dispatch_tool(name: str, arguments: dict, storage: MemoryBankStorage) -> li
         tags = arguments.get("tags", [])
         logger.debug("tool: search_by_tags, tags=%s", tags)
         return _handle_search_by_tags(storage, tags)
+
+    if name == "memory_bank_append_content":
+        logger.debug(
+            "tool: append_content, name=%s, tags=%s, core=%s",
+            arguments.get("name"),
+            arguments.get("tags"),
+            arguments.get("core", False),
+        )
+        return _handle_append_content(storage, arguments)
 
     logger.warning("unknown tool requested: %s", name)
     return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
@@ -262,6 +313,39 @@ def _handle_search_by_tags(storage: MemoryBankStorage, tags: list[str]) -> list[
     docs = storage.search_by_tags(tags)
     result = [doc.to_dict(include_content=False) for doc in docs]
     return [TextContent(type="text", text=json.dumps({"documents": result}, ensure_ascii=False))]
+
+
+def _handle_append_content(storage: MemoryBankStorage, arguments: dict) -> list[TextContent]:
+    name = arguments.get("name", "")
+    content = arguments.get("content", "")
+    tags = arguments.get("tags") or None
+    core = bool(arguments.get("core", False))
+
+    if not name:
+        logger.error("append_content called without name")
+        return [TextContent(type="text", text=json.dumps({"error": "name is required"}))]
+    if not content:
+        logger.error("append_content called without content for '%s'", name)
+        return [TextContent(type="text", text=json.dumps({"error": "content is required"}))]
+
+    try:
+        doc, content_length = storage.append_content(
+            name=name, content=content, tags=tags, core=core
+        )
+    except ValueError as exc:
+        logger.error("append_content validation error for '%s': %s", name, exc)
+        return [TextContent(type="text", text=json.dumps({"error": str(exc)}))]
+
+    logger.info("content appended: %s (content_length=%d)", doc.name, content_length)
+    return [TextContent(
+        type="text",
+        text=json.dumps({
+            "success": True,
+            "name": doc.name,
+            "lastModified": doc.last_modified,
+            "contentLength": content_length,
+        }),
+    )]
 
 
 # ------------------------------------------------------------------

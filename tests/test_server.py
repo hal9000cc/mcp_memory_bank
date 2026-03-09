@@ -8,6 +8,7 @@ import pytest
 
 import mcp_memory_bank.server as server_module
 from mcp_memory_bank.server import (
+    _handle_append_content,
     _handle_read_context,
     _handle_read_documents,
     _handle_search_by_tags,
@@ -38,9 +39,9 @@ def _json(text_contents) -> dict:
 # list_tools
 # ------------------------------------------------------------------
 
-def test_list_tools_returns_four():
+def test_list_tools_returns_five():
     tools = asyncio.run(list_tools())
-    assert len(tools) == 4
+    assert len(tools) == 5
 
 
 def test_list_tools_names():
@@ -51,6 +52,7 @@ def test_list_tools_names():
         "memory_bank_read_documents",
         "memory_bank_write_document",
         "memory_bank_search_by_tags",
+        "memory_bank_append_content",
     }
 
 
@@ -180,6 +182,69 @@ def test_search_by_tags_no_content_returned(inject_storage):
 
 
 # ------------------------------------------------------------------
+# memory_bank_append_content
+# ------------------------------------------------------------------
+
+def test_append_content_success(inject_storage):
+    inject_storage.write_document("log.md", "# Log", ["log", "progress"])
+    result = _json(_handle_append_content(inject_storage, {
+        "name": "log.md",
+        "content": "## New entry",
+    }))
+    assert result["success"] is True
+    assert result["name"] == "log.md"
+    assert "lastModified" in result
+    assert result["contentLength"] > len("# Log")
+
+
+def test_append_content_creates_new_document(inject_storage):
+    result = _json(_handle_append_content(inject_storage, {
+        "name": "new_log.md",
+        "content": "## First entry",
+        "tags": ["log", "progress"],
+    }))
+    assert result["success"] is True
+    assert result["contentLength"] == len("## First entry")
+    loaded = inject_storage.read_documents(["new_log.md"])[0]
+    assert loaded is not None
+
+
+def test_append_content_missing_name(inject_storage):
+    result = _json(_handle_append_content(inject_storage, {
+        "name": "",
+        "content": "some text",
+    }))
+    assert "error" in result
+
+
+def test_append_content_missing_content(inject_storage):
+    result = _json(_handle_append_content(inject_storage, {
+        "name": "doc.md",
+        "content": "",
+    }))
+    assert "error" in result
+
+
+def test_append_content_new_doc_no_tags_error(inject_storage):
+    result = _json(_handle_append_content(inject_storage, {
+        "name": "ghost.md",
+        "content": "data",
+    }))
+    assert "error" in result
+
+
+def test_append_content_persisted(inject_storage):
+    inject_storage.write_document("doc.md", "original", ["a", "b"])
+    _handle_append_content(inject_storage, {
+        "name": "doc.md",
+        "content": "appended",
+    })
+    loaded = inject_storage.read_documents(["doc.md"])[0]
+    assert "original" in loaded.content
+    assert "appended" in loaded.content
+
+
+# ------------------------------------------------------------------
 # call_tool routing
 # ------------------------------------------------------------------
 
@@ -200,6 +265,19 @@ async def test_call_tool_missing_project_id(inject_storage):
     from mcp_memory_bank.server import call_tool
     result = _json(await call_tool("memory_bank_read_context", {}))
     assert "error" in result
+
+
+@pytest.mark.asyncio
+async def test_call_tool_routing_append(inject_storage):
+    from mcp_memory_bank.server import call_tool
+    inject_storage.write_document("routed_log.md", "entry1", ["log", "test"])
+    result = _json(await call_tool("memory_bank_append_content", {
+        "project_id": TEST_PROJECT_ID,
+        "name": "routed_log.md",
+        "content": "entry2",
+    }))
+    assert result["success"] is True
+    assert "contentLength" in result
 
 
 @pytest.mark.asyncio
