@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mcp-memory-bank"
+version = "0.1.0"
+description = "Persistent memory server for AI assistants via Model Context Protocol"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "hal9000cc", email = "hal@hal9000.cc" }
+]
+keywords = ["mcp", "memory", "memory bank", "mcp memory bank", "ai", "assistant", "context"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+]
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.0.0",
+    "python-frontmatter>=1.1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/hal9000cc/mcp_memory_bank"
+Repository = "https://github.com/hal9000cc/mcp_memory_bank"
+"Bug Tracker" = "https://github.com/hal9000cc/mcp_memory_bank/issues"
+
+[project.scripts]
+mcp-memory-bank = "mcp_memory_bank.server:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_memory_bank"]

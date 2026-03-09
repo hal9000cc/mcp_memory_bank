@@ -3,6 +3,76 @@
 Сервер долговременной памяти для AI-ассистентов, реализованный как MCP-сервер (Model Context Protocol).  
 Позволяет сохранять и восстанавливать контекст между сессиями.
 
+## Установка
+
+```bash
+pip install mcp-memory-bank
+```
+
+После установки команда `mcp-memory-bank` становится доступна в PATH.
+
+## Настройка в Cline
+
+Откройте настройки Cline → **MCP Servers** → добавьте сервер вручную:
+
+```json
+{
+  "mcpServers": {
+    "memory-bank": {
+      "command": "mcp-memory-bank",
+      "args": ["--dir", "/absolute/path/to/your/project/.memory_bank"]
+    }
+  }
+}
+```
+
+> **Совет:** укажите путь к папке `.memory_bank` внутри вашего проекта.  
+> Если аргумент `--dir` не передан, сервер создаст `.memory_bank/` в текущей рабочей директории.
+
+Добавьте `.memory_bank/` в `.gitignore` проекта — память специфична для разработчика.
+
+### Подключение RULES.md
+
+Скопируйте файл [`RULES.md`](RULES.md) из этого репозитория в настройки инструкций Cline  
+(Settings → Custom Instructions) или добавьте в `.clinerules` вашего проекта — это научит ассистента работать с памятью.
+
+---
+
+## Как это работает
+
+### Хранилище
+
+Данные хранятся в указанной папке:
+
+```
+.memory_bank/
+├── documents/
+│   ├── context.md          ← Markdown + YAML frontmatter
+│   ├── activeTask.md
+│   └── architecture.md
+└── index.db                ← SQLite индекс для быстрого поиска
+```
+
+Каждый документ — это человекочитаемый Markdown-файл с метаданными в YAML frontmatter:
+
+```markdown
+---
+tags:
+  - decision
+  - architecture
+core: false
+lastModified: '2026-03-09T01:00:00Z'
+---
+# Архитектурные решения
+
+## Выбор СУБД
+...
+```
+
+SQLite-индекс пересобирается автоматически при каждом запуске сервера — файлы остаются источником истины.
+
+---
+
 ## Протокол
 
 ### Концепция
