@@ -9,6 +9,7 @@ Allows you to save and restore context between sessions. Requires Python 3.10+.
 ## Version 1.1.0
 ### What's new
 - Added common shared storage via `project_id=""` for documents that should be available across multiple projects.
+- Added `memory_bank_delete_document` for deleting existing documents with an explicit error when the document does not exist.
 - Added new metadata fields in document responses: `common` and `size`.
 - Updated `memory_bank_search_by_tags` to search both project storage and common shared storage.
 - Switched to a single shared SQLite index for all projects instead of per-project indexes.
