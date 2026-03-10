@@ -6,6 +6,15 @@
 A long-term memory server for AI assistants, implemented as an MCP server (Model Context Protocol).  
 Allows you to save and restore context between sessions. Requires Python 3.10+.
 
+## Version 1.1.0
+### What's new
+- Added common shared storage via `project_id=""` for documents that should be available across multiple projects.
+- Added `memory_bank_delete_document` for deleting existing documents with an explicit error when the document does not exist.
+- Added new metadata fields in document responses: `common` and `size`.
+- Updated `memory_bank_search_by_tags` to search both project storage and common shared storage.
+- Switched to a single shared SQLite index for all projects instead of per-project indexes.
+- Replaced full index rebuilds on startup with incremental index synchronization.
+
 ## Version 1.0.3
 ### What's new
 - Added `memory_bank_append_content` tool — append text to existing documents without loading their full content into the LLM context.
@@ -137,12 +146,15 @@ However, any meaningful string identifier is valid as `project_id`. In that case
 **Global mode** — storage structure:
 ```
 ~/.local/share/mcp-memory-bank/
+├── index.db
+├── common_storage/
+│   └── documents/
+│       └── shared-checklist.md
 └── projects/
     ├── my_project_a1b2c3d4/    ← slug from project_id
-    │   ├── documents/
-    │   │   ├── context.md
-    │   │   └── activeTask.md
-    │   └── index.db
+    │   └── documents/
+    │       ├── context.md
+    │       └── activeTask.md
     └── another_project_e5f6a7b8/
         └── ...
 ```
@@ -173,7 +185,17 @@ lastModified: '2026-03-09T01:00:00Z'
 ...
 ```
 
-The SQLite index is rebuilt automatically on every server start — files remain the source of truth.
+The SQLite index is synchronized incrementally on tool calls — files remain the source of truth.
+
+### Common shared storage
+
+Memory Bank also supports a shared storage area that is not tied to a single project.
+
+- The agent uses `project_id=""` (empty string) to read or write documents in common storage.
+- To place a document in common storage, ask the agent to do so — for example: "Save this checklist to the shared storage."
+- Common storage is useful for reusable information shared across projects, such as release checklists, team notes, or reference documents.
+- `memory_bank_read_context(project_id=<project>)` does **not** automatically load common documents.
+- `memory_bank_search_by_tags(project_id=<project>, tags=[...])` searches both the current project storage and the common shared storage.
 
 ---
 
@@ -209,24 +231,30 @@ The main tool for starting a session. Returns:
 {
   "documents": [
     {
+      "common": false,
       "name": "context.md",
       "tags": ["context", "global"],
       "core": true,
       "lastModified": "2026-03-09T01:00:00Z",
+      "size": 753,
       "content": "# Project: ...\n\n..."
     },
     {
+      "common": false,
       "name": "activeTask.md",
       "tags": ["task", "active"],
       "core": true,
       "lastModified": "2026-03-09T01:15:00Z",
+      "size": 1024,
       "content": "# Current Task: ...\n\n..."
     },
     {
+      "common": false,
       "name": "architecture.md",
       "tags": ["decision", "architecture"],
       "core": false,
       "lastModified": "2026-03-08T18:00:00Z",
+      "size": 2048,
       "content": null
     }
   ]
@@ -251,10 +279,12 @@ Reads one or more documents by name.
 {
   "documents": [
     {
+      "common": false,
       "name": "architecture.md",
       "tags": ["decision", "architecture"],
       "core": false,
       "lastModified": "2026-03-08T18:00:00Z",
+      "size": 2048,
       "content": "# Architectural Decisions\n\n## Database Selection\n\nDecided to use PostgreSQL..."
     }
   ]
@@ -294,6 +324,7 @@ Creates a new document or completely overwrites an existing one.
 
 Searches documents by tags. Returns documents that have **all** of the specified tags.  
 Content is **not returned** — only metadata. To read content, use `read_documents`.
+When `project_id` is not empty, the search includes both the current project storage and the common shared storage.
 
 **Parameters:**
 
@@ -307,10 +338,20 @@ Content is **not returned** — only metadata. To read content, use `read_docume
 {
   "documents": [
     {
+      "common": false,
       "name": "architecture.md",
       "tags": ["decision", "architecture", "database"],
       "core": false,
-      "lastModified": "2026-03-08T18:00:00Z"
+      "lastModified": "2026-03-08T18:00:00Z",
+      "size": 2048
+    },
+    {
+      "common": true,
+      "name": "release-checklist.md",
+      "tags": ["release", "checklist", "shared"],
+      "core": false,
+      "lastModified": "2026-03-10T09:00:00Z",
+      "size": 8192
     }
   ]
 }
@@ -348,6 +389,37 @@ If the document does not exist, it will be created (tags are required in that ca
 ```
 
 `contentLength` — total length of the document content after the append (in characters).
+
+---
+
+#### `memory_bank_delete_document(project_id, name)`
+
+Deletes an existing document by name.
+
+If the document does not exist, the tool returns an error.
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `project_id` | `string` | ✅ | Project identifier |
+| `name` | `string` | ✅ | Document name to delete |
+
+**Returns:**
+```json
+{
+  "success": true,
+  "name": "obsolete.md"
+}
+```
+
+If the document is not found:
+
+```json
+{
+  "error": "Document not found: obsolete.md"
+}
+```
 
 ---
 
