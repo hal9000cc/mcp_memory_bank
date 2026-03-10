@@ -15,10 +15,6 @@ Allows you to save and restore context between sessions. Requires Python 3.10+.
 - Switched to a single shared SQLite index for all projects instead of per-project indexes.
 - Replaced full index rebuilds on startup with incremental index synchronization.
 
-## Version 1.0.3
-### What's new
-- Added `memory_bank_append_content` tool — append text to existing documents without loading their full content into the LLM context.
-
 ## Why do you need this?
 
 ### 💰 Token savings
