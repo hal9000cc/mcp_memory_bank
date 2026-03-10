@@ -45,7 +45,13 @@ def test_to_dict_field_names():
 def test_to_dict_all_fields_present():
     doc = _make_doc()
     result = doc.to_dict()
-    assert set(result.keys()) == {"name", "tags", "core", "lastModified", "content"}
+    assert set(result.keys()) == {"common", "name", "tags", "core", "lastModified", "size", "content"}
+
+
+def test_to_dict_size_present():
+    doc = _make_doc(project_id="/tmp/project", size=123)
+    result = doc.to_dict(include_content=False)
+    assert result["size"] == 123
 
 
 def test_to_dict_tags_preserved():
@@ -57,3 +63,11 @@ def test_to_dict_tags_preserved():
 def test_to_dict_core_flag():
     assert _make_doc(core=True).to_dict()["core"] is True
     assert _make_doc(core=False).to_dict()["core"] is False
+
+
+def test_to_dict_common_flag_for_common_storage():
+    assert _make_doc(project_id="").to_dict()["common"] is True
+
+
+def test_to_dict_common_flag_for_project_storage():
+    assert _make_doc(project_id="/tmp/project").to_dict()["common"] is False

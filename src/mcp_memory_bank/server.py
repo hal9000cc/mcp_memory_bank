@@ -12,12 +12,12 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from .storage import MemoryBankStorage, resolve_storage_path
+from .storage import MemoryBankStorage, get_storage_root
 
 logger = logging.getLogger("memory-bank")
 
-# Per-project storage cache: project_id -> MemoryBankStorage
-_storages: dict[str, MemoryBankStorage] = {}
+# Shared storage instance
+_storage: Optional[MemoryBankStorage] = None
 _base_dir: Optional[Path] = None
 _project_local: bool = False
 _response_delay_ms: int = 0
@@ -36,11 +36,13 @@ PROJECT_ID_SCHEMA = {
 
 
 def _get_storage(project_id: str) -> MemoryBankStorage:
-    if project_id not in _storages:
-        path = resolve_storage_path(project_id, _base_dir, _project_local)
-        logger.info("initializing storage for project '%s' at %s", project_id, path)
-        _storages[project_id] = MemoryBankStorage(path)
-    return _storages[project_id]
+    del project_id
+    global _storage
+    if _storage is None:
+        root = get_storage_root(_base_dir)
+        logger.info("initializing shared storage at %s", root)
+        _storage = MemoryBankStorage(root, project_local=_project_local)
+    return _storage
 
 
 # ------------------------------------------------------------------
@@ -175,6 +177,21 @@ async def list_tools() -> list[Tool]:
                 "required": ["project_id", "name", "content"],
             },
         ),
+        Tool(
+            name="memory_bank_delete_document",
+            description="Delete an existing document by name. Returns an error if the document is not found.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    **PROJECT_ID_SCHEMA,
+                    "name": {
+                        "type": "string",
+                        "description": "Document filename, e.g. 'activeTask.md'",
+                    },
+                },
+                "required": ["project_id", "name"],
+            },
+        ),
     ]
 
 
@@ -188,11 +205,11 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     t0 = time.monotonic()
     logger.debug(">>> call_tool: name=%s, args=%s", name, arguments)
     try:
-        project_id = arguments.get("project_id", "")
-        if not project_id:
+        if "project_id" not in arguments:
             return [TextContent(type="text", text=json.dumps({"error": "project_id is required"}))]
+        project_id = arguments["project_id"]
         storage = _get_storage(project_id)
-        result = _dispatch_tool(name, arguments, storage)
+        result = _dispatch_tool(name, arguments, storage, project_id)
         if _response_delay_ms > 0:
             logger.debug("call_tool: sleeping %dms before response", _response_delay_ms)
             await asyncio.sleep(_response_delay_ms / 1000)
@@ -209,15 +226,20 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         return [TextContent(type="text", text=json.dumps({"error": "Internal server error"}))]
 
 
-def _dispatch_tool(name: str, arguments: dict, storage: MemoryBankStorage) -> list[TextContent]:
+def _dispatch_tool(
+    name: str,
+    arguments: dict,
+    storage: MemoryBankStorage,
+    project_id: str,
+) -> list[TextContent]:
     if name == "memory_bank_read_context":
         logger.debug("tool: read_context")
-        return _handle_read_context(storage)
+        return _handle_read_context(storage, project_id)
 
     if name == "memory_bank_read_documents":
         names = arguments.get("names", [])
         logger.debug("tool: read_documents, names=%s", names)
-        return _handle_read_documents(storage, names)
+        return _handle_read_documents(storage, project_id, names)
 
     if name == "memory_bank_write_document":
         logger.debug(
@@ -226,12 +248,12 @@ def _dispatch_tool(name: str, arguments: dict, storage: MemoryBankStorage) -> li
             arguments.get("tags"),
             arguments.get("core", False),
         )
-        return _handle_write_document(storage, arguments)
+        return _handle_write_document(storage, project_id, arguments)
 
     if name == "memory_bank_search_by_tags":
         tags = arguments.get("tags", [])
         logger.debug("tool: search_by_tags, tags=%s", tags)
-        return _handle_search_by_tags(storage, tags)
+        return _handle_search_by_tags(storage, project_id, tags)
 
     if name == "memory_bank_append_content":
         logger.debug(
@@ -240,21 +262,25 @@ def _dispatch_tool(name: str, arguments: dict, storage: MemoryBankStorage) -> li
             arguments.get("tags"),
             arguments.get("core", False),
         )
-        return _handle_append_content(storage, arguments)
+        return _handle_append_content(storage, project_id, arguments)
+
+    if name == "memory_bank_delete_document":
+        logger.debug("tool: delete_document, name=%s", arguments.get("name"))
+        return _handle_delete_document(storage, project_id, arguments)
 
     logger.warning("unknown tool requested: %s", name)
     return [TextContent(type="text", text=json.dumps({"error": f"Unknown tool: {name}"}))]
 
 
-def _handle_read_context(storage: MemoryBankStorage) -> list[TextContent]:
+def _handle_read_context(storage: MemoryBankStorage, project_id: str) -> list[TextContent]:
     logger.debug("read_context: reading all metadata")
-    all_docs = storage.read_all_metadata()
+    all_docs = storage.read_all_metadata(project_id)
     logger.debug("read_context: total documents=%d", len(all_docs))
 
     core_names = [d.name for d in all_docs if d.core]
     logger.debug("read_context: core documents=%s", core_names)
 
-    core_with_content = storage.read_documents(core_names)
+    core_with_content = storage.read_documents(project_id, core_names)
     core_map = {d.name: d for d in core_with_content if d is not None}
     logger.debug("read_context: loaded core content for=%s", list(core_map.keys()))
 
@@ -273,8 +299,12 @@ def _handle_read_context(storage: MemoryBankStorage) -> list[TextContent]:
     return [TextContent(type="text", text=payload)]
 
 
-def _handle_read_documents(storage: MemoryBankStorage, names: list[str]) -> list[TextContent]:
-    docs = storage.read_documents(names)
+def _handle_read_documents(
+    storage: MemoryBankStorage,
+    project_id: str,
+    names: list[str],
+) -> list[TextContent]:
+    docs = storage.read_documents(project_id, names)
     result = []
     for doc in docs:
         if doc is None:
@@ -284,7 +314,11 @@ def _handle_read_documents(storage: MemoryBankStorage, names: list[str]) -> list
     return [TextContent(type="text", text=json.dumps({"documents": result}, ensure_ascii=False))]
 
 
-def _handle_write_document(storage: MemoryBankStorage, arguments: dict) -> list[TextContent]:
+def _handle_write_document(
+    storage: MemoryBankStorage,
+    project_id: str,
+    arguments: dict,
+) -> list[TextContent]:
     name = arguments.get("name", "")
     content = arguments.get("content", "")
     tags = arguments.get("tags", [])
@@ -297,7 +331,13 @@ def _handle_write_document(storage: MemoryBankStorage, arguments: dict) -> list[
         logger.error("write_document: too few tags for '%s': %s", name, tags)
         return [TextContent(type="text", text=json.dumps({"error": "at least 2 tags required"}))]
 
-    doc = storage.write_document(name=name, content=content, tags=tags, core=core)
+    doc = storage.write_document(
+        project_id=project_id,
+        name=name,
+        content=content,
+        tags=tags,
+        core=core,
+    )
     logger.info("document saved: %s (core=%s, tags=%s)", doc.name, doc.core, doc.tags)
     return [TextContent(
         type="text",
@@ -309,13 +349,21 @@ def _handle_write_document(storage: MemoryBankStorage, arguments: dict) -> list[
     )]
 
 
-def _handle_search_by_tags(storage: MemoryBankStorage, tags: list[str]) -> list[TextContent]:
-    docs = storage.search_by_tags(tags)
+def _handle_search_by_tags(
+    storage: MemoryBankStorage,
+    project_id: str,
+    tags: list[str],
+) -> list[TextContent]:
+    docs = storage.search_by_tags(project_id, tags)
     result = [doc.to_dict(include_content=False) for doc in docs]
     return [TextContent(type="text", text=json.dumps({"documents": result}, ensure_ascii=False))]
 
 
-def _handle_append_content(storage: MemoryBankStorage, arguments: dict) -> list[TextContent]:
+def _handle_append_content(
+    storage: MemoryBankStorage,
+    project_id: str,
+    arguments: dict,
+) -> list[TextContent]:
     name = arguments.get("name", "")
     content = arguments.get("content", "")
     tags = arguments.get("tags") or None
@@ -330,7 +378,7 @@ def _handle_append_content(storage: MemoryBankStorage, arguments: dict) -> list[
 
     try:
         doc, content_length = storage.append_content(
-            name=name, content=content, tags=tags, core=core
+            project_id=project_id, name=name, content=content, tags=tags, core=core
         )
     except ValueError as exc:
         logger.error("append_content validation error for '%s': %s", name, exc)
@@ -344,6 +392,33 @@ def _handle_append_content(storage: MemoryBankStorage, arguments: dict) -> list[
             "name": doc.name,
             "lastModified": doc.last_modified,
             "contentLength": content_length,
+        }),
+    )]
+
+
+def _handle_delete_document(
+    storage: MemoryBankStorage,
+    project_id: str,
+    arguments: dict,
+) -> list[TextContent]:
+    name = arguments.get("name", "")
+
+    if not name:
+        logger.error("delete_document called without name")
+        return [TextContent(type="text", text=json.dumps({"error": "name is required"}))]
+
+    try:
+        storage.delete_document(project_id=project_id, name=name)
+    except FileNotFoundError:
+        logger.error("delete_document: document not found '%s'", name)
+        return [TextContent(type="text", text=json.dumps({"error": f"Document not found: {name}"}))]
+
+    logger.info("document deleted: %s", name)
+    return [TextContent(
+        type="text",
+        text=json.dumps({
+            "success": True,
+            "name": name,
         }),
     )]
 

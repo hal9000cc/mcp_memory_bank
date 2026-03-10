@@ -24,7 +24,30 @@ Example: if the Current Working Directory is `/home/user/projects/my_app`, pass 
 | `memory_bank_read_documents(project_id, names)` | Reads full content of specific documents by name |
 | `memory_bank_write_document(project_id, name, content, tags, core)` | Creates or fully overwrites a document |
 | `memory_bank_append_content(project_id, name, content, tags, core)` | Appends text to the end of a document without reading it first |
+| `memory_bank_delete_document(project_id, name)` | Deletes a document by name; returns an error if it does not exist |
 | `memory_bank_search_by_tags(project_id, tags)` | Searches documents by tags, returns metadata only |
+
+### Common Storage
+
+Memory Bank also supports a **common shared storage** that is not tied to a specific project.
+
+- Use `project_id=""` (empty string) to read or write documents in the common storage
+- Common documents are **not** loaded automatically by `memory_bank_read_context(project_id=<project>)`
+- `memory_bank_search_by_tags(project_id=<project>, tags=[...])` searches both:
+  - the current project storage
+  - the common shared storage
+- Search results include:
+  - `common: true` for documents from the shared storage
+  - `common: false` for project-specific documents
+  - `size` to help decide whether a document is worth loading in full
+
+This is useful for reusable materials shared across multiple projects, for example:
+- release checklists
+- team-wide operational notes
+- reusable prompts
+- logs or reference modules if the user and agent decide that is appropriate
+
+CRITICAL: Only place documents in shared storage at the user's request or with permission.
 
 ### When to use `append_content` vs `write_document`
 
@@ -33,12 +56,20 @@ Example: if the Current Working Directory is `/home/user/projects/my_app`, pass 
 
 The key advantage of `append_content`: the server reads the file internally — the existing document content **never enters your context**. Use it for any log-style document that grows over time.
 
+For common storage, the same tools are used — just pass `project_id=""`.
+
 ---
 
 ## Memory Bank in PLAN MODE
 
-Memory Bank writes **are allowed in PLAN MODE**. Unlike project files, Memory Bank documents are metadata and context — not code artifacts.
+Memory Bank documents are **metadata**, not code or project files.  
+Working with them primarily happens in **PLAN MODE**, so writing is allowed in **both modes**.
 
+If you need to write a document in PLAN MODE, **do it immediately**.  
+- **Do not ask the user to switch to ACT MODE**  
+- **Do not ask for separate confirmation** before writing — just write.
+
+This is an explicit exception to the general "don't modify files in PLAN mode" guideline.
 Recording decisions, updating task status, and noting observations during planning is not just allowed but **encouraged**.
 
 In PLAN MODE you **should**:
@@ -61,6 +92,8 @@ This is an explicit exception to the general "don't modify files in PLAN mode" g
    - Full content of core documents (`core=true`)
 3. Analyze the core documents: understand the project, the current task, and the last progress.
 4. If needed, read additional documents via `memory_bank_read_documents`.
+
+Note: `memory_bank_read_context(project_id=<cwd>)` loads only documents for that specific project. It does **not** automatically include documents from the common shared storage.
 
 **If Memory Bank is empty** (an empty `documents` array was returned) — **ask the user first**:
 
@@ -104,7 +137,7 @@ memory_bank_write_document(
 
 - On any **significant decision**, immediately update the relevant document.
 - Use `memory_bank_search_by_tags` to find related documents before making important decisions.
-- After searching, read the needed documents in full via `memory_bank_read_documents`.
+- After searching, review fields such as `common` and `size`, then read only the documents that are actually needed via `memory_bank_read_documents`.
 - Update `activeTask.md` when switching subtasks or when a blocker appears.
 
 **What counts as significant:**
@@ -174,11 +207,17 @@ Always use Markdown with clear `##` headings and `-` lists.
 - `core: true` — only for documents **needed at every startup**: `context.md`, `projectStructure.md`, `activeTask.md`.
 - Everything else — `core: false`. Do not overuse this flag; it pollutes the context.
 
-### What NOT to store
-- Large code fragments (that is what the project files are for)
-- Full command execution logs
-- Temporary notes and drafts
-- Information that is already present in the project code
+### What to keep compact
+
+For documents with `core: true`:
+- Keep them compact and high-signal
+- Avoid large code fragments, long logs, or bulky drafts
+- Store only what is useful at the start of nearly every session
+
+For documents with `core: false`:
+- There are no hard restrictions in these rules
+- The user and the agent may decide what is worth storing
+- If a search result points to a large document, use the `size` field to decide whether loading it is actually helpful
 
 ---
 
@@ -202,42 +241,94 @@ memory_bank_read_context(project_id="/home/user/projects/my_app")
 ```
 → Reads context.md, projectStructure.md and activeTask.md automatically. Understand the project, its structure, and where we left off.
 
+Returned document metadata may include fields such as:
+- `common` — whether the document comes from the shared common storage
+- `size` — file size in bytes
+
 ---
 
 ### User mentioned a topic — search for related documents
 ```
 memory_bank_search_by_tags(project_id="/home/user/projects/my_app", tags=["database"])
 ```
-→ Get a list of documents tagged "database" (metadata only).
+→ Get a list of matching documents from both the current project and the common shared storage (metadata only).
+
+Example result shape:
+```json
+{
+  "documents": [
+    {
+      "common": false,
+      "name": "architecture.md",
+      "tags": ["database", "decision"],
+      "core": false,
+      "lastModified": "2026-03-09T10:00:00Z",
+      "size": 2048
+    },
+    {
+      "common": true,
+      "name": "release-checklist.md",
+      "tags": ["release", "checklist"],
+      "core": false,
+      "lastModified": "2026-03-10T09:00:00Z",
+      "size": 8192
+    }
+  ]
+}
+```
+
+If a matching document is large, consider whether you need to load it at all.
 
 ```
 memory_bank_read_documents(project_id="/home/user/projects/my_app", names=["architecture.md"])
 ```
 → Read the needed document in full.
 
+To read a document from the common shared storage:
+
+```
+memory_bank_read_documents(project_id="", names=["release-checklist.md"])
+```
+
+→ Reads the shared document by name from the common storage.
+
 ---
 
 ### Architectural decision made
 ```
 memory_bank_write_document(
-  project_id: "/home/user/projects/my_app",
-  name: "architecture.md",
-  content: "# Architectural Decisions\n\n## 2026-03-09: Database Selection\n\nUsing PostgreSQL 15+.\n\n**Reasons:**\n- Open source\n- JSON support\n- Reliability\n\n**Alternatives:** MySQL (rejected due to license), MongoDB (not suitable for relational data).",
-  tags: ["decision", "architecture", "database"],
-  core: false
+  project_id="/home/user/projects/my_app",
+  name="architecture.md",
+  content="# Architectural Decisions\n\n## 2026-03-09: Database Selection\n\nUsing PostgreSQL 15+.\n\n**Reasons:**\n- Open source\n- JSON support\n- Reliability\n\n**Alternatives:** MySQL (rejected due to license), MongoDB (not suitable for relational data).",
+  tags=["decision", "architecture", "database"],
+  core=False,
 )
 ```
+
+### Shared release checklist for multiple projects
+
+```
+memory_bank_write_document(
+  project_id="",
+  name="release-checklist.md",
+  content="# Release Checklist\n\n## Before tagging\n- [ ] Update version\n- [ ] Update changelog\n- [ ] Run tests\n\n## Release\n- [ ] Create git tag\n- [ ] Build artifacts\n- [ ] Publish to package registry",
+  tags=["release", "checklist", "shared"],
+  core=False,
+)
+```
+
+→ Stores a reusable release checklist in the common shared storage so it can be found from multiple projects via tag search.
 
 ---
 
 ### Subtask completed — update activeTask
 ```
 memory_bank_write_document(
-  project_id: "/home/user/projects/my_app",
-  name: "activeTask.md",
-  content: "# Current Task: Database Connection Setup\n\n## Done\n- [x] Database selected (PostgreSQL)\n- [x] Connection configuration created\n\n## Next Steps\n- [ ] Write migrations\n- [ ] Create data models\n\n## Blockers\n- Waiting for ORM decision",
-  tags: ["task", "active", "database"],
-  core: true
+  project_id="/home/user/projects/my_app",
+  name="activeTask.md",
+  content="# Current Task: Database Connection Setup\n\n## Done\n- [x] Database selected (PostgreSQL)\n- [x] Connection configuration created\n\n## Next Steps\n- [ ] Write migrations\n- [ ] Create data models\n\n## Blockers\n- Waiting for ORM decision",
+  tags=["task", "active", "database"],
+  core=True,
 )
 ```
 
@@ -249,11 +340,11 @@ Use `append_content` to add a session entry without reading the full log history
 
 ```
 memory_bank_append_content(
-  project_id: "/home/user/projects/my_app",
-  name: "progress.md",
-  content: "## 2026-03-09\n- [x] PostgreSQL selected and configured\n- [x] Table structure created\n- [ ] Migrations — in progress\n\n### Issues\n- High latency on first connection",
-  tags: ["progress", "log"],
-  core: false
+  project_id="/home/user/projects/my_app",
+  name="progress.md",
+  content="## 2026-03-09\n- [x] PostgreSQL selected and configured\n- [x] Table structure created\n- [ ] Migrations — in progress\n\n### Issues\n- High latency on first connection",
+  tags=["progress", "log"],
+  core=False,
 )
 ```
 
@@ -267,10 +358,10 @@ Always update `activeTask.md` to move completed tasks to "Recently Completed":
 
 ```
 memory_bank_write_document(
-  project_id: "/home/user/projects/my_app",
-  name: "activeTask.md",
-  content: "# Task Tracker\n\n## Current Task: none\n\n## Next Steps\n- [ ] Write migrations\n\n## Open Tasks\n- [ ] Write migrations\n- [ ] Create data models\n\n## Recently Completed\n- [x] Database selected and configured (09.03.2026)\n- [x] Table structure created (09.03.2026)",
-  tags: ["task", "active"],
-  core: true
+  project_id="/home/user/projects/my_app",
+  name="activeTask.md",
+  content="# Task Tracker\n\n## Current Task: none\n\n## Next Steps\n- [ ] Write migrations\n\n## Open Tasks\n- [ ] Write migrations\n- [ ] Create data models\n\n## Recently Completed\n- [x] Database selected and configured (09.03.2026)\n- [x] Table structure created (09.03.2026)",
+  tags=["task", "active"],
+  core=True,
 )
 ```

@@ -16,18 +16,21 @@ def tmp_storage(tmp_path: pathlib.Path) -> MemoryBankStorage:
 def populated_storage(tmp_storage: MemoryBankStorage) -> MemoryBankStorage:
     """Storage pre-filled with three documents for convenience."""
     tmp_storage.write_document(
+        "",
         "context.md",
         "# Project context\n\nTest project.",
         ["context", "global"],
         core=True,
     )
     tmp_storage.write_document(
+        "",
         "activeTask.md",
         "# Active task\n\nDoing stuff.",
         ["task", "active"],
         core=True,
     )
     tmp_storage.write_document(
+        "",
         "architecture.md",
         "# Architecture\n\nUsing SQLite.",
         ["decision", "architecture", "database"],
