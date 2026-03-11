@@ -6,14 +6,10 @@
 A personal long-term memory server for AI assistants, implemented as an MCP server (Model Context Protocol).  
 Designed for individual use, not for teams. Allows you to save and restore context between sessions. Requires Python 3.10+.
 
-## Version 1.1.0
+## Version 1.1.1
 ### What's new
-- Added common shared storage via `project_id=""` for documents that should be available across multiple projects.
-- Added `memory_bank_delete_document` for deleting existing documents with an explicit error when the document does not exist.
-- Added new metadata fields in document responses: `common` and `size`.
-- Updated `memory_bank_search_by_tags` to search both project storage and common shared storage.
-- Switched to a single shared SQLite index for all projects instead of per-project indexes.
-- Replaced full index rebuilds on startup with incremental index synchronization.
+- Atomic file writes: Markdown documents are now written via temp file + `fsync` + `os.replace`, which prevents file corruption on crashes.
+- Resilient document parsing: invalid YAML frontmatter and malformed `tags` no longer break index synchronization.
 
 ## Why do you need this?
 
