@@ -3,8 +3,8 @@
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mcp-memory-bank)
 # MCP Memory Bank
 
-A long-term memory server for AI assistants, implemented as an MCP server (Model Context Protocol).  
-Allows you to save and restore context between sessions. Requires Python 3.10+.
+A personal long-term memory server for AI assistants, implemented as an MCP server (Model Context Protocol).  
+Designed for individual use, not for teams. Allows you to save and restore context between sessions. Requires Python 3.10+.
 
 ## Version 1.1.0
 ### What's new
@@ -189,7 +189,7 @@ Memory Bank also supports a shared storage area that is not tied to a single pro
 
 - The agent uses `project_id=""` (empty string) to read or write documents in common storage.
 - To place a document in common storage, ask the agent to do so — for example: "Save this checklist to the shared storage."
-- Common storage is useful for reusable information shared across projects, such as release checklists, team notes, or reference documents.
+- Common storage is useful for reusable information shared across projects, such as release checklists, personal notes, or reference documents.
 - `memory_bank_read_context(project_id=<project>)` does **not** automatically load common documents.
 - `memory_bank_search_by_tags(project_id=<project>, tags=[...])` searches both the current project storage and the common shared storage.
 

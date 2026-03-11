@@ -5,12 +5,14 @@ import json
 import logging
 import os
 import sqlite3
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import frontmatter
+import yaml
 from platformdirs import user_data_dir
 
 from .models import Document
@@ -378,15 +380,44 @@ class MemoryBankStorage:
             logger.debug("document not found: %s/%s", project_id, name)
             return None
 
-        post = frontmatter.load(str(path))
-        tags = post.get("tags", [])
-        if isinstance(tags, str):
-            tags = [tags]
+        try:
+            post = frontmatter.load(str(path))
+        except (yaml.YAMLError, ValueError, OSError) as exc:
+            logger.warning(
+                "failed to parse markdown document %s/%s: %s",
+                project_id,
+                name,
+                exc,
+            )
+            return None
+
+        raw_tags = post.get("tags", [])
+        if isinstance(raw_tags, str):
+            tags = [raw_tags]
+        elif isinstance(raw_tags, list):
+            tags = [str(tag) for tag in raw_tags if isinstance(tag, (str, int, float, bool))]
+            invalid_count = len(raw_tags) - len(tags)
+            if invalid_count > 0:
+                logger.warning(
+                    "skipping %d non-scalar tags in %s/%s",
+                    invalid_count,
+                    project_id,
+                    name,
+                )
+        else:
+            logger.warning(
+                "invalid tags type in %s/%s: %s; using empty tags",
+                project_id,
+                name,
+                type(raw_tags).__name__,
+            )
+            tags = []
+
         stat = path.stat()
         return Document(
             project_id=project_id,
             name=name,
-            tags=list(tags),
+            tags=tags,
             core=bool(post.get("core", False)),
             last_modified=_stat_mtime_iso(stat),
             size=stat.st_size,
@@ -402,7 +433,28 @@ class MemoryBankStorage:
         post = frontmatter.Post(doc.content or "", **metadata)
         path = self._md_path(doc.project_id, doc.name)
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(frontmatter.dumps(post), encoding="utf-8")
+        content = frontmatter.dumps(post)
+
+        temp_path: Optional[Path] = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=path.parent,
+                prefix=f"{path.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as temp_file:
+                temp_file.write(content)
+                temp_file.flush()
+                os.fsync(temp_file.fileno())
+                temp_path = Path(temp_file.name)
+
+            os.replace(temp_path, path)
+        except BaseException:
+            if temp_path is not None and temp_path.exists():
+                temp_path.unlink()
+            raise
 
         if not self.project_local and doc.project_id:
             slug_file = self.get_project_storage_dir(doc.project_id) / ".project_id"

@@ -178,6 +178,23 @@ def test_md_file_content_readable(tmp_storage):
     assert "Some text here." in raw
 
 
+def test_atomic_write_keeps_original_on_replace_failure(tmp_storage, monkeypatch):
+    tmp_storage.write_document("", "atomic.md", "v1", ["a", "b"])
+    target_path = tmp_storage.docs_dir / "atomic.md"
+    original_content = target_path.read_text(encoding="utf-8")
+
+    def fail_replace(_src, _dst):
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr("mcp_memory_bank.storage.os.replace", fail_replace)
+
+    with pytest.raises(OSError, match="simulated replace failure"):
+        tmp_storage.write_document("", "atomic.md", "v2", ["a", "b"])
+
+    assert target_path.read_text(encoding="utf-8") == original_content
+    assert list(tmp_storage.docs_dir.glob("atomic.md.*.tmp")) == []
+
+
 # ------------------------------------------------------------------
 # Index sync on restart
 # ------------------------------------------------------------------
@@ -208,6 +225,41 @@ def test_sync_picks_up_manually_added_file(tmp_storage):
     restarted = MemoryBankStorage(tmp_storage.base_dir)
     names = {d.name for d in restarted.read_all_metadata("")}
     assert "manual.md" in names
+
+
+def test_sync_skips_file_with_invalid_yaml_frontmatter(tmp_storage):
+    path = tmp_storage.docs_dir / "broken.md"
+    path.write_text("---\ntags: [broken\ncore: true\n---\n# Body", encoding="utf-8")
+
+    restarted = MemoryBankStorage(tmp_storage.base_dir)
+
+    assert restarted.read_documents("", ["broken.md"])[0] is None
+    assert "broken.md" not in {d.name for d in restarted.read_all_metadata("")}
+
+
+def test_read_document_with_invalid_tags_type_returns_empty_tags(tmp_storage):
+    path = tmp_storage.docs_dir / "bad-tags.md"
+    path.write_text("---\ntags: 123\ncore: false\n---\n# Body", encoding="utf-8")
+
+    restarted = MemoryBankStorage(tmp_storage.base_dir)
+    loaded = restarted.read_documents("", ["bad-tags.md"])[0]
+
+    assert loaded is not None
+    assert loaded.tags == []
+
+
+def test_read_document_with_non_scalar_tags_filters_them(tmp_storage):
+    path = tmp_storage.docs_dir / "mixed-tags.md"
+    path.write_text(
+        "---\ntags:\n  - keep\n  - 7\n  - nested:\n      x: 1\ncore: false\n---\n# Body",
+        encoding="utf-8",
+    )
+
+    restarted = MemoryBankStorage(tmp_storage.base_dir)
+    loaded = restarted.read_documents("", ["mixed-tags.md"])[0]
+
+    assert loaded is not None
+    assert loaded.tags == ["keep", "7"]
 
 
 def test_schema_version_initialized(tmp_storage):

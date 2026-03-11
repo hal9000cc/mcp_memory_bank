@@ -43,7 +43,7 @@ Memory Bank also supports a **common shared storage** that is not tied to a spec
 
 This is useful for reusable materials shared across multiple projects, for example:
 - release checklists
-- team-wide operational notes
+- personal operational notes
 - reusable prompts
 - logs or reference modules if the user and agent decide that is appropriate
 
