@@ -173,7 +173,7 @@ def test_md_file_content_readable(tmp_storage):
     """The Markdown content must be readable without any special parser."""
     body = "# My document\n\nSome text here."
     tmp_storage.write_document("", "readable.md", body, ["a", "b"])
-    raw = (tmp_storage.docs_dir / "readable.md").read_text()
+    raw = (tmp_storage.docs_dir / "readable.md").read_text(encoding="utf-8")
     assert "# My document" in raw
     assert "Some text here." in raw
 

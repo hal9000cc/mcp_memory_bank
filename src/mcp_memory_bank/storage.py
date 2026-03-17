@@ -381,7 +381,8 @@ class MemoryBankStorage:
             return None
 
         try:
-            post = frontmatter.load(str(path))
+            with open(path, encoding="utf-8") as f:
+                post = frontmatter.load(f)
         except (yaml.YAMLError, ValueError, OSError) as exc:
             logger.warning(
                 "failed to parse markdown document %s/%s: %s",
