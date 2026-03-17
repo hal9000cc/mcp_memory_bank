@@ -6,6 +6,10 @@
 A personal long-term memory server for AI assistants, implemented as an MCP server (Model Context Protocol).  
 Designed for individual use, not for teams. Allows you to save and restore context between sessions. Requires Python 3.10+.
 
+## Version 1.1.2
+### What's new
+- Fixed UTF-8 encoding when reading documents on Windows: `frontmatter.load(path)` replaced with explicit `open(path, encoding="utf-8")`.
+
 ## Version 1.1.1
 ### What's new
 - Atomic file writes: Markdown documents are now written via temp file + `fsync` + `os.replace`, which prevents file corruption on crashes.
