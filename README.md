@@ -8,7 +8,7 @@ Designed for individual use, not for teams. Allows you to save and restore conte
 
 ## Version 1.1.2
 ### What's new
-- Fixed UTF-8 encoding when reading documents on Windows: `frontmatter.load(path)` replaced with explicit `open(path, encoding="utf-8")`.
+- Fixed UTF-8 encoding when reading documents on Windows.
 
 ## Version 1.1.1
 ### What's new
