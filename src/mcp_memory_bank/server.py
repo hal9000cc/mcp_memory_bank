@@ -208,6 +208,17 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
         if "project_id" not in arguments:
             return [TextContent(type="text", text=json.dumps({"error": "project_id is required"}))]
         project_id = arguments["project_id"]
+        if project_id != "" and not Path(project_id).is_absolute():
+            return [TextContent(
+                type="text",
+                text=json.dumps({
+                    "error": (
+                        "project_id must be an absolute path "
+                        "(e.g. '/home/user/project' or 'C:\\Projects\\MyApp'). "
+                        f"Got relative path: {project_id!r}"
+                    )
+                }),
+            )]
         storage = _get_storage(project_id)
         result = _dispatch_tool(name, arguments, storage, project_id)
         if _response_delay_ms > 0:

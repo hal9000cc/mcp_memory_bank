@@ -121,6 +121,16 @@ def test_local_mode_different_projects_different_dirs(tmp_path):
     assert path_a != path_b
 
 
+def test_local_mode_relative_project_id_rejected():
+    with pytest.raises(ValueError, match="absolute path"):
+        resolve_storage_path("relative-project-id", None, project_local=True)
+
+
+def test_global_mode_relative_project_id_rejected(tmp_path):
+    with pytest.raises(ValueError, match="absolute path"):
+        resolve_storage_path("relative-project-id", tmp_path, project_local=False)
+
+
 # ------------------------------------------------------------------
 # End-to-end: data isolation between projects
 # ------------------------------------------------------------------

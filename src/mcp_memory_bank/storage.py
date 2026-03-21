@@ -51,6 +51,12 @@ def resolve_storage_path(project_id: str, base_dir: Optional[Path], project_loca
     """Return the document storage directory for a given project_id."""
     if project_id == "":
         return get_storage_root(base_dir) / COMMON_STORAGE_DIR
+    if not Path(project_id).is_absolute():
+        raise ValueError(
+            "project_id must be an absolute path "
+            "(e.g. '/home/user/project' or 'C:\\Projects\\MyApp'). "
+            f"Got relative path: {project_id!r}"
+        )
     if project_local:
         return Path(project_id) / ".memory_bank"
     root = get_storage_root(base_dir)

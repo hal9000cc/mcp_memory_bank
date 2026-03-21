@@ -352,6 +352,14 @@ async def test_call_tool_common_storage_write(inject_storage):
 
 
 @pytest.mark.asyncio
+async def test_call_tool_relative_project_id_rejected(inject_storage):
+    from mcp_memory_bank.server import call_tool
+    result = _json(await call_tool("memory_bank_read_context", {"project_id": "relative-project-id"}))
+    assert "absolute path" in result["error"]
+    assert "relative-project-id" in result["error"]
+
+
+@pytest.mark.asyncio
 async def test_call_tool_routing_append(inject_storage):
     from mcp_memory_bank.server import call_tool
     inject_storage.write_document(TEST_PROJECT_ID, "routed_log.md", "entry1", ["log", "test"])

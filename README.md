@@ -6,12 +6,14 @@
 A personal long-term memory server for AI assistants, implemented as an MCP server (Model Context Protocol).  
 Designed for individual use, not for teams. Allows you to save and restore context between sessions. Requires Python 3.10+.
 
-## Version 1.1.2
+## Version 1.1.3
 ### What's new
+- Added validation that requires an absolute `project_id` in all storage modes.
+
+## Version 1.1.2
 - Fixed UTF-8 encoding when reading documents on Windows.
 
 ## Version 1.1.1
-### What's new
 - Atomic file writes: Markdown documents are now written via temp file + `fsync` + `os.replace`, which prevents file corruption on crashes.
 - Resilient document parsing: invalid YAML frontmatter and malformed `tags` no longer break index synchronization.
 
@@ -441,15 +443,13 @@ Document names are recommendations. Any meaningful names in `camelCase.md` or `k
 | `--project-local` | flag | disabled | Store data inside each project (`<project_id>/.memory_bank/`) |
 | `--log-level` | string | `INFO` | Log level: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `--log-file` | path | stderr | File for writing logs. If not specified — logs go to stderr |
-| `--response-delay` | number (ms) | `0` | Delay before sending a response to each tool call |
+| `--response-delay` | number (ms) | `0` | Delay before sending a response to each tool call. Mainly useful only for older Cline versions with extended thinking; current Cline releases do not need it because the underlying issue has already been fixed. |
 
 ---
 
-### `--response-delay`: workaround for extended thinking bug
+In older Cline versions, when using models with extended thinking (for example, Claude Opus with the "Extended thinking" option), a race condition could occur: Cline did not have enough time to pass thinking blocks back to the Claude API before receiving a response from the MCP server. This could cause a hang after the "Thinking..." message.
 
-In Cline 3.71.0, when using models with extended thinking (e.g., Claude Opus with the "Extended thinking" option), a race condition occurs: Cline doesn't have time to pass thinking blocks back to the Claude API before receiving a response from the MCP server. This causes a hang after the "Thinking..." message.
-
-**Fix:** add a 100 ms delay — this is enough to resolve the issue:
+This issue has already been fixed in current Cline releases, so `--response-delay` is usually no longer required. If you are working with an older Cline version and still see this behavior, adding a small delay such as 100 ms can help:
 
 ```json
 {
@@ -463,5 +463,3 @@ In Cline 3.71.0, when using models with extended thinking (e.g., Claude Opus wit
   }
 }
 ```
-
-> **Note:** the `--response-delay` argument is only relevant when using extended thinking. For regular usage, the delay can be omitted.
